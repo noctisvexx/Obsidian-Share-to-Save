@@ -25,6 +25,7 @@ import { TextSaver } from './text-saver';
 import { showNotice } from './notice-utils';
 import { attachmentPath } from './attachment-storage';
 import { TaskModal } from './task-modal';
+import { MobileClipper } from './mobile-clipper';
 
 export default class ShareToSavePlugin extends Plugin {
 	settings!: ShareToSaveSettings;
@@ -51,6 +52,7 @@ export default class ShareToSavePlugin extends Plugin {
 			this.app.vault,
 			() => this.settings.queueFolder,
 			() => this.settings.outputFolder,
+			this.settings.deviceId,
 		);
 
 		// ── 初始化文字保存器 / Initialize text saver ──
@@ -79,7 +81,7 @@ export default class ShareToSavePlugin extends Plugin {
 		}
 
 		// ── 初始化下载器和文件监听器（桌面端）/ Initialize downloader & watcher (desktop) ──
-		if (Platform.isDesktop) {
+		{
 			this.downloader = new Downloader(
 				this.app.vault,
 				this.settings,
@@ -89,16 +91,19 @@ export default class ShareToSavePlugin extends Plugin {
 
 			this.fileWatcher = new FileWatcher(
 				this.queueManager,
-				this.downloader,
+				Platform.isMobile ? new MobileClipper(this.downloader) : this.downloader,
 				(msg) => {
 					console.debug(`Share to Save: ${msg}`);
 				},
 				() => this.getPollIntervalMs(),
 				this.t,
+				Platform.isMobile ? 'mobile' : 'desktop',
+				() => this.settings.desktopFallback,
+				() => Platform.isDesktop || this.settings.mobileFirst,
 			);
 			this.fileWatcher.start();
 			this.fileWatcher.onProcessingChange = (processing) => {
-				this.ribbonIconEl.classList.toggle('sts-processing', processing);
+				this.ribbonIconEl?.classList.toggle('sts-processing', processing);
 			};
 		}
 
@@ -123,7 +128,7 @@ export default class ShareToSavePlugin extends Plugin {
 			if (params.url || params.text) await this.handleUrlInput(params.url || params.text || '');
 			else await this.openInputModal();
 		});
-		this.addCommand({ id: 'view-tasks', name: '查看剪藏任务 / View clipping tasks', callback: () => this.showTasks() });
+		this.addCommand({ id: 'view-tasks', name: '查看剪藏任务 / view clipping tasks', callback: () => this.showTasks() });
 
 		// ── 设置页 / Settings tab ──
 		this.addSettingTab(new ShareToSaveSettingTab(this.app, this, this.t));
@@ -153,16 +158,14 @@ export default class ShareToSavePlugin extends Plugin {
 			return;
 		}
 
-		await this.queueManager.appendEntry(
-			QueueManager.buildEntry(url, Platform.isDesktop ? 'desktop' : 'mobile'),
-		);
+		await this.enqueueUrl(url);
 
 		// 桌面端立即触发处理 / Desktop: trigger immediate processing
-		if (Platform.isDesktop) {
+		if (Platform.isDesktop || this.settings.mobileFirst) {
 			await this.fileWatcher?.processNow();
 		}
 
-		showNotice(this.t('notice.saved'));
+		showNotice('任务已接收，可在剪藏任务中查看结果 / Task received; see clipping tasks');
 	}
 
 	/**
@@ -196,20 +199,14 @@ export default class ShareToSavePlugin extends Plugin {
 
 			// 统一入队 / Enqueue all URLs
 			for (const url of urls) {
-				await this.queueManager.appendEntry(
-					QueueManager.buildEntry(url, Platform.isDesktop ? 'desktop' : 'mobile'),
-				);
+				await this.enqueueUrl(url);
 			}
 
 			// 数量通知 / Count notification
-			if (urls.length === 1) {
-				showNotice(this.t('notice.saved'));
-			} else {
-				showNotice(this.t('notice.savedMultiple', { count: String(urls.length) }));
-			}
+			showNotice(`已接收 ${urls.length} 个剪藏任务 / ${urls.length} clipping task(s) received`);
 
 			// 立即处理（桌面端）/ Process immediately (desktop)
-			if (Platform.isDesktop) {
+			if (Platform.isDesktop || this.settings.mobileFirst) {
 				await this.fileWatcher?.processNow();
 			}
 		} catch (err) {
@@ -286,6 +283,10 @@ export default class ShareToSavePlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<ShareToSaveSettings>);
+		// Device identity stays local; only queue tasks participate in Vault sync.
+		const deviceId: unknown = this.app.loadLocalStorage('share-to-save-device');
+		this.settings.deviceId = typeof deviceId === 'string' && deviceId ? deviceId : crypto.randomUUID();
+		this.app.saveLocalStorage('share-to-save-device', this.settings.deviceId);
 		if (this.settings.queueFolder === this.settings.outputFolder || this.settings.queueFolder.startsWith(this.settings.outputFolder + '/'))
 			this.settings.queueFolder = DEFAULT_SETTINGS.queueFolder;
 	}
@@ -295,6 +296,16 @@ export default class ShareToSavePlugin extends Plugin {
 	}
 
 	showTasks(): void {
-		new TaskModal(this.app, this.queueManager, () => this.fileWatcher?.processNow() ?? Promise.resolve()).open();
+		new TaskModal(this.app, this.queueManager, () => this.fileWatcher?.processNow() ?? Promise.resolve(),
+			() => Platform.isMobile && this.settings.mobileFirst ? 'mobile' : 'desktop').open();
+	}
+
+	private async enqueueUrl(url: string): Promise<void> {
+		const entry = QueueManager.buildEntry(url, Platform.isDesktop ? 'desktop' : 'mobile');
+		entry.target = Platform.isMobile && this.settings.mobileFirst ? 'mobile' : 'desktop';
+		entry.originDevice = this.settings.deviceId;
+		entry.allowDesktopFallback = this.settings.desktopFallback;
+		entry.noteFolder = this.settings.outputFolder;
+		await this.queueManager.appendEntry(entry);
 	}
 }

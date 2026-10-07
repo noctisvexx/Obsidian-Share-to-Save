@@ -9,7 +9,7 @@
  */
 
 import type { QueueManager } from './queue-manager';
-import type { Downloader } from './downloader';
+import type { ProcessResult } from './types';
 import type { Translator } from './i18n';
 import { showNotice } from './notice-utils';
 
@@ -17,16 +17,20 @@ export class FileWatcher {
 	private timerId: number | null = null;
 	private isProcessing = false; // 防止并发处理 / Prevent concurrent processing
 	private currentIntervalMs: number;
+	private running = false;
 
 	/** 处理状态变化回调，用于驱动 UI 更新 / Callback for processing state change, drives UI updates */
 	onProcessingChange: ((processing: boolean) => void) | null = null;
 
 	constructor(
 		private queueManager: QueueManager,
-		private downloader: Downloader,
+		private downloader: { processUrl(url: string, id: string, folder?: string): Promise<ProcessResult> },
 		private debugLog: (msg: string) => void,
 		private getPollIntervalMs: () => number,  // 动态配置，零耦合 / Dynamic config, zero coupling
 		private t: Translator,
+		private target: 'mobile' | 'desktop' = 'desktop',
+		private getFallback: () => boolean = () => true,
+		private getEnabled: () => boolean = () => true,
 	) {
 		this.currentIntervalMs = getPollIntervalMs();
 	}
@@ -35,6 +39,8 @@ export class FileWatcher {
 	 * 启动定时轮询 / Start scheduled polling
 	 */
 	start(): void {
+		if (this.running) return;
+		this.running = true;
 		this.scheduleNext();
 		this.debugLog(`FileWatcher 已启动，间隔 ${this.currentIntervalMs}ms / FileWatcher started, ${this.currentIntervalMs}ms interval`);
 	}
@@ -43,6 +49,7 @@ export class FileWatcher {
 	 * 停止轮询 / Stop polling
 	 */
 	stop(): void {
+		this.running = false;
 		if (this.timerId !== null) {
 			window.clearTimeout(this.timerId);
 			this.timerId = null;
@@ -72,6 +79,7 @@ export class FileWatcher {
 	 * 调度下一次轮询 / Schedule next poll
 	 */
 	private scheduleNext(): void {
+		if (!this.running) return;
 		const interval = this.getPollIntervalMs();
 		this.currentIntervalMs = interval;
 		this.timerId = window.setTimeout(() => {
@@ -85,10 +93,11 @@ export class FileWatcher {
 	 */
 	private async check(): Promise<void> {
 		if (this.isProcessing) return;
+		if (!this.getEnabled()) return;
 		this.isProcessing = true;
 
 		try {
-			const entries = await this.queueManager.getPendingEntries();
+			const entries = await this.queueManager.getPendingEntries(this.target, this.target === 'desktop' && this.getFallback());
 			if (entries.length === 0) return;
 
 			this.isProcessing = true;
@@ -98,15 +107,16 @@ export class FileWatcher {
 			for (const entry of entries) {
 				// delete on start：处理前删除文件，防止重复处理
 				// delete on start: remove file before processing to prevent re-processing
-				if (!await this.queueManager.claim(entry)) continue;
+				if (!await this.queueManager.claim(entry, this.target === 'desktop' && this.getFallback())) continue;
 
 				try {
-					const result = await this.downloader.processUrl(entry.url, entry.id);
+					const result = await this.downloader.processUrl(entry.url, entry.id, entry.noteFolder);
 					if (result.success) {
-						await this.queueManager.finish(entry);
+						await this.queueManager.finish(entry, undefined, result.warnings?.join('; '));
 						showNotice(this.t('notice.savedTitle', { title: result.title ?? entry.url }));
 					} else {
 						await this.queueManager.finish(entry, result.error || 'Content extraction failed');
+						showNotice(this.t('notice.downloadFailed', { error: result.error || 'Content extraction failed' }));
 						this.debugLog(`提取失败 / Extraction failed: ${entry.url}`);
 					}
 				} catch (err) {

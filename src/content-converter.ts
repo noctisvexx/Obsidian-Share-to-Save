@@ -16,6 +16,7 @@ import { escapeObsidianTags, escapeLinkDestination, ANGLT, ANGGT } from './text-
 
 /** 内容转换结果 / Content conversion result */
 export interface ConvertResult {
+	mediaOnly?: boolean;
 	/** Markdown 正文 / Markdown body */
 	markdown: string;
 	/** 平台可修正 MetadataExtractor 提取的元数据 / Platform can patch metadata from MetadataExtractor */
@@ -586,6 +587,7 @@ class XiaohongshuConverter implements ContentConverter {
 
 		return {
 			markdown: parts.join('\n'),
+			mediaOnly: note.type === 'normal' && Boolean(note.imageList?.length),
 			metadataPatch: Object.keys(metadataPatch).length > 0 ? metadataPatch : undefined,
 		};
 	}
@@ -1010,6 +1012,7 @@ const converters: ContentConverter[] = [
 
 /** Defuddle 通用回退，始终在注册表末尾作为兜底 / Defuddle generic fallback, always at end of registry */
 const defuddleFallback = new DefuddleConverter();
+export function genericConverter(): ContentConverter { return defuddleFallback; }
 
 /**
  * 查找匹配的转换器，无匹配时返回 DefuddleConverter 兜底

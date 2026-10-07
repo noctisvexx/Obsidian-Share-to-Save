@@ -3,10 +3,12 @@ import type { App } from 'obsidian';
 import type { ShareToSaveSettings } from './types';
 
 export async function attachmentPath(app: App, settings: ShareToSaveSettings, filename: string, sourcePath: string): Promise<string> {
+	if (!filename || filename === '.' || filename === '..' || /[\\/:|]/.test(filename) || filename.includes('[') || filename.includes(']'))
+		throw new Error('Invalid attachment filename');
 	if (settings.attachmentPolicy === 'obsidian')
 		return app.fileManager.getAvailablePathForAttachment(filename, sourcePath);
 	const folder = normalizePath(settings.attachmentFolder);
-	if (!folder || folder.split('/').some(p => p === '..' || p === '.') || folder.startsWith('/'))
+	if (!folder || /[\\:]/.test(settings.attachmentFolder) || folder.split('/').some(p => p === '..' || p === '.') || folder.startsWith('/'))
 		throw new Error('Invalid attachment folder');
 	if (!await app.vault.adapter.exists(folder)) await app.vault.createFolder(folder);
 	const base = normalizePath(`${folder}/${filename}`);

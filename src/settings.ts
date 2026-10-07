@@ -2,7 +2,7 @@
  * 插件设置 / Plugin settings
  */
 
-import { PluginSettingTab, Setting, App, requestUrl, setIcon, Platform } from 'obsidian';
+import { PluginSettingTab, Setting, App, setIcon, Platform } from 'obsidian';
 import { showNotice } from './notice-utils';
 import type ShareToSavePlugin from './main';
 import type { ShareToSaveSettings, PollIntervalUnit, TimestampFormat } from './types';
@@ -15,14 +15,14 @@ export const DEFAULT_SETTINGS: ShareToSaveSettings = {
 	queueFolder: '_ShareToSave/queue',
 	attachmentPolicy: 'obsidian',
 	attachmentFolder: '_ShareToSave/attachments',
+	mobileFirst: true,
+	desktopFallback: true,
+	deviceId: '',
 	pollIntervalValue: 30,
 	pollIntervalUnit: 'seconds',
 	timestampFormat: 'h1',
 	timestampEnabled: true,
 };
-
-/** 用户流程图远程 URL / User flow diagram remote URL */
-const IMAGE_REMOTE_URL = 'https://raw.githubusercontent.com/chenxiccc/Obsidian-Share-to-Save/main/assets/UserFlow.png';
 
 export class ShareToSaveSettingTab extends PluginSettingTab {
 	constructor(
@@ -36,6 +36,11 @@ export class ShareToSaveSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
+		for (const [key, label] of [['mobileFirst', '手机优先剪藏 / Clip on mobile first'], ['desktopFallback', '桌面自动兜底 / Desktop fallback']] as const) {
+			new Setting(containerEl).setName(label).addToggle(toggle => toggle.setValue(this.plugin.settings[key]).onChange(async value => {
+				this.plugin.settings[key] = value; await this.plugin.saveSettings();
+			}));
+		}
 		for (const [key, label] of [['queueFolder', '任务保存目录 / Task folder'], ['attachmentFolder', '自定义附件目录 / Custom attachment folder']] as const) {
 			new Setting(containerEl).setName(label).addText(text => text.setValue(this.plugin.settings[key]).onChange(async value => {
 				if (validateFolderPath(value) || value.split('/').some(p => p === '..' || p === '.')) return;
@@ -74,14 +79,6 @@ export class ShareToSaveSettingTab extends PluginSettingTab {
 		} else {
 			descEl.setText(content);
 		}
-
-		// ── 用户流程图 / User flow diagram ──
-		const imgContainer = usageBox.createDiv({ cls: 'sts-userflow-container' });
-		const img = imgContainer.createEl('img', {
-			attr: { alt: 'User Flow' },
-		});
-		// 异步加载图片：优先本地，失败回退远程 / Load image async: local first, fallback remote
-		void this.loadImage(img);
 
 // ── 保存文件夹 / Output folder ──
 		new Setting(containerEl)
@@ -194,7 +191,9 @@ export class ShareToSaveSettingTab extends PluginSettingTab {
 		}
 		const shortcutFields = [
 			{ labelKey: 'settings.shortcut.action', value: 'android.intent.action.VIEW' },
+			// eslint-disable-next-line obsidianmd/hardcoded-config-path -- Android package identifier, not a Vault path.
 			{ labelKey: 'settings.shortcut.package', value: 'md.obsidian' },
+			// eslint-disable-next-line obsidianmd/hardcoded-config-path -- Android activity identifier, not a Vault path.
 			{ labelKey: 'settings.shortcut.class', value: 'md.obsidian.MainActivity' },
 			{ labelKey: 'settings.shortcut.data', value: 'obsidian://share-to-save' },
 		];
@@ -213,38 +212,4 @@ export class ShareToSaveSettingTab extends PluginSettingTab {
 		}
 	}
 
-	/**
-	 * 加载图片：优先本地，失败回退远程 URL
-	 * Load image: local first, fallback to remote URL
-	 */
-	private async loadImage(img: HTMLImageElement): Promise<void> {
-		const adapter = this.app.vault.adapter;
-		const configDir = this.app.vault.configDir;
-		const localPath = `${configDir}/plugins/share-to-save/assets/UserFlow.png`;
-		const assetsDir = `${configDir}/plugins/share-to-save/assets/`;
-
-		// 本地已存在 → 直接用 / Local exists → use directly
-		if (await adapter.exists(localPath)) {
-			img.src = adapter.getResourcePath(localPath);
-			return;
-		}
-
-		// 从 GitHub 下载 / Download from GitHub
-		try {
-			const response = await requestUrl({ url: IMAGE_REMOTE_URL });
-			if (response.status === 200 && response.arrayBuffer) {
-				// 确保目录存在 / Ensure directory exists
-				if (!await adapter.exists(assetsDir)) {
-					await adapter.mkdir(assetsDir);
-				}
-				await adapter.writeBinary(localPath, response.arrayBuffer);
-				img.src = adapter.getResourcePath(localPath);
-				return;
-			}
-		} catch {
-			// 下载失败，降级到远程 URL / Download failed, fallback to remote URL
-		}
-
-		img.src = IMAGE_REMOTE_URL;
-	}
 }

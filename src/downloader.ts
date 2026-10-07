@@ -8,11 +8,12 @@
 import { Vault, normalizePath } from 'obsidian';
 import type { ParsedContent, ProcessResult, ShareToSaveSettings, Metadata } from './types';
 import { buildHeaders } from './http-utils';
-import { sanitizeFilename, computeEffectiveContent, normalizeTitle, preprocessHtml, normalizeDocument, postprocessContent } from './text-utils';
+import { sanitizeFilename, normalizeTitle, preprocessHtml, normalizeDocument, postprocessContent } from './text-utils';
 import { ImageHandler } from './image-handler';
 import type { Translator } from './i18n';
 import { HeadlessExtractor } from './headless-extractor';
-import { findConverter } from './content-converter';
+import { findConverter, genericConverter } from './content-converter';
+import { QualityValidator } from './quality-validator';
 import { MetadataExtractor } from './metadata-extractor';
 
 /** 最大重定向次数 / Maximum redirect hops */
@@ -120,8 +121,8 @@ export class Downloader {
 	 * 处理单个 URL：获取 HTML → 转换管线 → 判断提取成功 → 保存/失败
 	 * Process a single URL: acquire HTML → pipeline → check extraction success → save/fail
 	 */
-	async processUrl(url: string, stsId: string): Promise<ProcessResult> {
-		const saved = await this.existingTaskNote(stsId);
+	async processUrl(url: string, stsId: string, folder = this.settings.outputFolder): Promise<ProcessResult> {
+		const saved = await this.existingTaskNote(stsId, folder);
 		if (saved) return saved;
 		const cleanUrl = Downloader.stripWeChatTrackingParams(url);
 		const { html, canonicalUrl } = await this.acquireHtml(cleanUrl);
@@ -129,13 +130,17 @@ export class Downloader {
 			return { success: false, error: '无法获取页面内容 / Failed to fetch page content' };
 		}
 
-		const parsed = this.processDocToParsed(html, canonicalUrl);
+		let parsed = this.processDocToParsed(html, canonicalUrl);
 		if (!parsed) {
 			return { success: false, error: '无法提取页面内容 / Failed to extract page content' };
 		}
 
+		if (!Downloader.isExtractionSuccessful(parsed)) {
+			const generic = this.processDocToParsed(html, canonicalUrl, true);
+			if (generic && Downloader.isExtractionSuccessful(generic)) parsed = generic;
+		}
 		if (Downloader.isExtractionSuccessful(parsed)) {
-			return this.saveNote(parsed, canonicalUrl, stsId, cleanUrl);
+			return this.saveNote(parsed, canonicalUrl, stsId, cleanUrl, folder);
 		}
 		return { success: false, error: 'Content extraction was incomplete' };
 	}
@@ -147,7 +152,7 @@ export class Downloader {
 	 * 预处理层和后处理层对所有页面统一执行，converter 只负责平台特有逻辑。
 	 * Pre/post processing applies to all pages; converters handle only platform-specific logic.
 	 */
-	private processDocToParsed(html: string, url: string): ParsedContent | null {
+	processDocToParsed(html: string, url: string, generic = false): ParsedContent | null {
 		try {
 			// 预处理：替换 &lt;/&gt; 为占位符，防止 Turndown 输出原始 HTML 标签
 			html = preprocessHtml(html);
@@ -158,8 +163,8 @@ export class Downloader {
 			normalizeDocument(doc);
 
 			const metadata = MetadataExtractor.extract(doc);
-			const converter = findConverter(url);
-			const result = converter.convert(doc, url);
+			const converter = generic ? genericConverter() : findConverter(url);
+			const result = converter.convert(doc, url, html);
 			Downloader.applyMetadataPatch(metadata, result.metadataPatch);
 
 			// 后处理：恢复占位符 + 空白规范化（所有文本字段统一）
@@ -170,7 +175,8 @@ export class Downloader {
 			if (metadata.author) metadata.author = postprocessContent(metadata.author);
 
 			const imageUrls = Downloader.extractImageUrls(content);
-			return { ...metadata, content, imageUrls };
+			return { ...metadata, content, imageUrls, mediaOnly: result.mediaOnly
+				|| (!generic && new URL(url).hostname === 'mp.weixin.qq.com' && doc.querySelectorAll('.img_swiper_area img').length >= 2) };
 		} catch (err) {
 			console.warn('Share to Save: 转换管线失败 / Pipeline failed:', err);
 			return null;
@@ -182,9 +188,7 @@ export class Downloader {
 	 * Check if pipeline output is extraction successful: any text or images = success, binary, no threshold.
 	 */
 	private static isExtractionSuccessful(parsed: ParsedContent): boolean {
-		const hasText = computeEffectiveContent(parsed.content).length > 0;
-		const hasImages = parsed.imageUrls.length > 0;
-		return hasText || hasImages;
+		return QualityValidator.validate(parsed).valid;
 	}
 
 	/**
@@ -210,40 +214,56 @@ export class Downloader {
 	 * 统一下游保存逻辑：sanitize → frontmatter → images → vault
 	 * Unified downstream save: sanitize → frontmatter → images → vault
 	 */
-	async saveNote(parsed: ParsedContent, canonicalUrl: string, stsId: string, inputUrl: string): Promise<ProcessResult> {
-		const saved = await this.existingTaskNote(stsId);
+	async saveNote(parsed: ParsedContent, canonicalUrl: string, stsId: string, inputUrl: string, folder = this.settings.outputFolder): Promise<ProcessResult> {
+		const saved = await this.existingTaskNote(stsId, folder);
 		if (saved) return saved;
 		const safeTitle = Downloader.sanitizeNoteTitle(parsed.title || 'Untitled');
 
 		const frontmatter = Downloader.buildFrontmatter(parsed, inputUrl, stsId);
 		let mdContent = frontmatter + '\n' + parsed.content.trimStart();
 
-		mdContent = await this.imageHandler.processContent(mdContent, safeTitle, canonicalUrl);
+		const finalPath = this.taskNotePath(stsId, folder);
+		mdContent = await this.imageHandler.processContent(mdContent, safeTitle, canonicalUrl, finalPath);
+		const warnings = Downloader.extractImageUrls(mdContent).map(url => `Attachment not downloaded: ${url}`);
+		for (const media of parsed.media || []) {
+			if (media.candidates.some(url => parsed.imageUrls.includes(url))) continue;
+			let saved = false;
+			for (const url of media.candidates) {
+				if (!/^https?:\/\//.test(url)) continue;
+				const snippet = await this.imageHandler.processContent(`![](${url})`, safeTitle, media.referer || canonicalUrl, finalPath);
+				if (snippet.startsWith('![[')) { mdContent += '\n\n' + snippet; saved = true; break; }
+			}
+			if (!saved) {
+				warnings.push(`${media.kind} could not be downloaded`);
+				if (media.candidates[0]) mdContent += `\n\n[${media.kind}](${media.candidates[0]})`;
+			}
+		}
 
-		const dirExists = await this.vault.adapter.exists(this.settings.outputFolder);
+		const dirExists = await this.vault.adapter.exists(folder);
 		if (!dirExists) {
-			await this.vault.createFolder(this.settings.outputFolder);
+			await this.vault.createFolder(folder);
 		}
 
 		// 处理同名文件：递增编号 / Handle duplicate filenames: increment counter
-		const finalPath = this.taskNotePath(stsId);
 		try { await this.vault.create(finalPath, mdContent); }
 		catch (error) {
-			const existing = await this.existingTaskNote(stsId);
+			const existing = await this.existingTaskNote(stsId, folder);
 			if (existing) return existing;
 			throw error;
 		}
 
-		return { success: true, title: safeTitle };
+		return { success: true, title: safeTitle, warnings };
 	}
 
-	private taskNotePath(id: string): string {
+	private taskNotePath(id: string, folder: string): string {
 		if (!/^[\w-]{1,128}$/.test(id)) throw new Error('Invalid task ID');
-		return normalizePath(`${this.settings.outputFolder}/Clip-${id}.md`);
+		if (!folder || folder.startsWith('/') || /[\\:]/.test(folder) || folder.split('/').some(p => !p || p === '.' || p === '..'))
+			throw new Error('Invalid note folder');
+		return normalizePath(`${folder}/Clip-${id}.md`);
 	}
 
-	private async existingTaskNote(id: string): Promise<ProcessResult | null> {
-		const path = this.taskNotePath(id);
+	async existingTaskNote(id: string, folder = this.settings.outputFolder): Promise<ProcessResult | null> {
+		const path = this.taskNotePath(id, folder);
 		if (!await this.vault.adapter.exists(path)) return null;
 		const content = await this.vault.adapter.read(path);
 		if (!content.split('\n---', 1)[0]?.includes(`sts_id: "${id}"`)) throw new Error('Existing note path belongs to another note');
@@ -647,8 +667,11 @@ export class Downloader {
 		maybeFailed?: boolean,
 	): string {
 		const lines: string[] = ['---'];
-		lines.push(`source: "${sourceUrl}"`);
+		lines.push(`source: ${JSON.stringify(sourceUrl)}`);
 		lines.push(`sts_id: "${stsId}"`);
+		lines.push(`title: ${JSON.stringify(parsed.title || 'Untitled')}`);
+		lines.push(`aliases: ${JSON.stringify([parsed.title || 'Untitled'])}`);
+		if (parsed.canonicalUrl) lines.push(`canonical: ${JSON.stringify(parsed.canonicalUrl)}`);
 
 		if (maybeFailed) {
 			lines.push('tags:');
@@ -657,7 +680,7 @@ export class Downloader {
 
 		if (parsed.author) {
 			lines.push('author:');
-			lines.push(`  - "${parsed.author}"`);
+			lines.push(`  - ${JSON.stringify(parsed.author)}`);
 		}
 
 		if (parsed.published) {

@@ -6,7 +6,8 @@
  * Based on ima-copilot-sync's ImageHandler and path-utils implementation
  */
 
-import { Vault, normalizePath } from 'obsidian';
+import { Vault, normalizePath, Platform } from 'obsidian';
+import { mobileRequest } from './mobile-http';
 import { buildHeaders } from './http-utils';
 import { sanitizeFilename as sanitizeForFs } from './text-utils';
 
@@ -97,6 +98,9 @@ function contentTypeToExt(contentType: string): string {
 	if (ct === 'image/webp') return '.webp';
 	if (ct === 'image/svg+xml') return '.svg';
 	if (ct === 'image/avif') return '.avif';
+	if (ct === 'video/mp4') return '.mp4';
+	if (ct === 'video/webm') return '.webm';
+	if (ct === 'audio/mpeg') return '.mp3';
 	return '';
 }
 
@@ -220,6 +224,7 @@ export class ImageHandler {
 		markdown: string,
 		noteTitle: string,
 		sourceUrl?: string,
+		notePath?: string,
 	): Promise<string> {
 		// 确保附件目录存在 / Ensure attachments directory exists
 		if (!this.getAttachmentPath) await this.ensureAttachmentsDir();
@@ -235,7 +240,7 @@ export class ImageHandler {
 		const dedupMap = new Map<string, string>();
 
 		// 下载外链图片并替换为 wikilink / Download external images and replace with wikilinks
-		markdown = await this.processMatches(markdown, IMG_URL_REGEX, noteTitle, dedupMap, sourceUrl);
+		markdown = await this.processMatches(markdown, IMG_URL_REGEX, noteTitle, dedupMap, sourceUrl, notePath);
 
 		return markdown;
 	}
@@ -277,6 +282,7 @@ export class ImageHandler {
 		noteTitle: string,
 		dedupMap: Map<string, string>,
 		sourceUrl?: string,
+		notePath?: string,
 	): Promise<string> {
 		const matches: Array<{ full: string; alt: string; url: string }> = [];
 		const re = new RegExp(regex.source, 'g');
@@ -293,7 +299,7 @@ export class ImageHandler {
 
 		// Phase 1: 并发下载（最多 3 并发，15s 超时 + 1 次重试）
 		// Phase 1: concurrent download (max 3 concurrent, 15s timeout + 1 retry)
-		type DownloadResult = { full: string; url: string; buffer: Buffer; contentType: string } | { full: string; url: string; buffer: null };
+		type DownloadResult = { full: string; url: string; buffer: Uint8Array; contentType: string } | { full: string; url: string; buffer: null };
 		// 回调内所有路径都 catch，不会抛异常，null 情况不会发生 / Callback catches all errors, null case impossible
 		const downloadResults = await this.withConcurrencyLimit(matches, 3, async (m) => {
 			try {
@@ -328,8 +334,10 @@ export class ImageHandler {
 			const existingWikilink = dedupMap.get(contentHash);
 			if (existingWikilink) { markdown = markdown.replace(full, existingWikilink); continue; }
 			let localPath = this.getAttachmentPath
-				? await this.getAttachmentPath(filename, `${this.getOutputFolder()}/${noteTitle}.md`)
+				? await this.getAttachmentPath(filename, notePath || `${this.getOutputFolder()}/${noteTitle}.md`)
 				: `${attachmentsDir}/${filename}`;
+			const originalPath = `${localPath.slice(0, localPath.lastIndexOf('/') + 1)}${filename}`;
+			if (await this.existsWithSameContent(originalPath, buffer)) localPath = originalPath;
 			if (await this.vault.adapter.exists(localPath) && !await this.existsWithSameContent(localPath, buffer)) {
 				let index = 1;
 				const base = localPath;
@@ -354,7 +362,7 @@ export class ImageHandler {
 			if (!dirExists) {
 				await this.vault.createFolder(dir);
 			}
-			await this.vault.createBinary(normalized, buffer);
+			await this.vault.createBinary(normalized, Uint8Array.from(buffer).buffer);
 
 			// 替换原 URL 为 wikilink / Replace original URL with wikilink
 			markdown = markdown.replace(full, wikilink);
@@ -428,10 +436,20 @@ export class ImageHandler {
 	 * 带重试的图片下载：15s 超时 + 1 次重试 + 1s 退避
 	 * Image download with retry: 15s timeout + 1 retry + 1s backoff
 	 */
-	private async downloadWithRetry(url: string, sourceUrl?: string): Promise<{ buffer: Buffer; contentType: string }> {
+	private async downloadWithRetry(url: string, sourceUrl?: string): Promise<{ buffer: Uint8Array; contentType: string }> {
 		for (let attempt = 0; attempt <= 1; attempt++) {
 			try {
-				return await this.nodeHttpsGetBuffer(url, sourceUrl);
+				if (Platform.isMobile) {
+					const response = await mobileRequest(url, sourceUrl, true);
+					const contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
+					if (!response.arrayBuffer.byteLength || /(?:text\/html|application\/json)/i.test(contentType))
+						throw new Error('Media response was empty or an error page');
+					return { buffer: new Uint8Array(response.arrayBuffer), contentType };
+				}
+				const result = await this.nodeHttpsGetBuffer(url, sourceUrl);
+				if (!result.buffer.byteLength || /(?:text\/html|application\/json)/i.test(result.contentType))
+					throw new Error('Media response was empty or an error page');
+				return result;
 			} catch (err) {
 				if (attempt === 1) throw err;
 				await new Promise(r => window.setTimeout(r, 1_000));
@@ -458,7 +476,7 @@ export class ImageHandler {
 	 * 去重检查：文件已存在且内容相同则跳过
 	 * Dedup check: skip if file exists with same content
 	 */
-	private async existsWithSameContent(path: string, buffer: Buffer): Promise<boolean> {
+	private async existsWithSameContent(path: string, buffer: Uint8Array): Promise<boolean> {
 		try {
 			const exists = await this.vault.adapter.exists(path);
 			if (!exists) return false;

@@ -12,6 +12,10 @@ export interface QueueEntry {
 	owner?: string;
 	leaseUntil?: string;
 	error?: string;
+	target?: 'mobile' | 'desktop';
+	originDevice?: string;
+	allowDesktopFallback?: boolean;
+	noteFolder?: string;
 	/** UUID v4 */
 	id: string;
 	/** 提取后的目标 URL / Extracted target URL */
@@ -37,8 +41,22 @@ export interface Metadata {
 
 /** 页面解析结果（元数据 + 正文 + 图片列表）/ Page parse result (metadata + body + image list) */
 export interface ParsedContent extends Metadata {
+	platform?: string;
+	originalUrl?: string;
+	canonicalUrl?: string;
+	authorUrl?: string;
+	media?: ParsedMedia[];
+	metadata?: Record<string, unknown>;
+	mediaOnly?: boolean;
 	content: string;
 	imageUrls: string[];
+}
+
+export interface ParsedMedia {
+	kind: 'image' | 'video' | 'audio' | 'file';
+	candidates: string[];
+	referer?: string;
+	alt?: string;
 }
 
 /** 轮询间隔单位 / Poll interval unit */
@@ -54,6 +72,9 @@ export interface ShareToSaveSettings {
 	queueFolder: string;
 	attachmentPolicy: 'obsidian' | 'custom';
 	attachmentFolder: string;
+	mobileFirst: boolean;
+	desktopFallback: boolean;
+	deviceId: string;
 	/** 轮询间隔数值（1-60）/ Poll interval value (1-60) */
 	pollIntervalValue: number;
 	/** 轮询间隔单位 / Poll interval unit */
@@ -79,4 +100,5 @@ export interface ProcessResult {
 	success: boolean;
 	title?: string;
 	error?: string;
+	warnings?: string[];
 }

@@ -65,8 +65,8 @@ export const STRINGS: Record<string, { zh: string; en: string }> = {
 		en: 'Output folder',
 	},
 	'settings.folder.desc': {
-		zh: '链接内容将保存到此文件夹下。如果要修改，需要电脑和手机的插件配置修改为相同文件夹名称',
-		en: 'Saved content will be placed in this folder. If you change it, update both desktop and mobile plugin settings to the same folder name',
+		zh: '新剪藏保存到此目录。已有任务继续使用创建时的目录。',
+		en: 'New clips are saved here. Existing tasks keep the folder selected when they were created.',
 	},
 	'settings.folder.empty': {
 		zh: '文件夹名不能为空',
@@ -97,8 +97,8 @@ export const STRINGS: Record<string, { zh: string; en: string }> = {
 		en: 'Instructions',
 	},
 	'settings.usage.content': {
-		zh: '请使用任意同步方式，推荐 ${link}，在手机和电脑间同步该文件夹，手机和电脑需使用相同文件夹。电脑端接收到新队列文件后，会自动开始获取网页内容。',
-		en: 'Use any sync method to sync this folder between mobile and desktop. We recommend ${link}. Both devices must use the same folder name. Desktop will automatically download web content when new queue files arrive.',
+		zh: '手机优先直接保存网页。失败后任务会保留，可在剪藏任务中重试；启用桌面兜底时，使用现有同步方式同步任务目录和附件目录即可。',
+		en: 'Mobile saves pages directly. Failed tasks remain available for retry. For optional desktop fallback, include task and attachment folders in your existing Vault sync.',
 	},
 	'settings.pollInterval.name': {
 		zh: '检测间隔',

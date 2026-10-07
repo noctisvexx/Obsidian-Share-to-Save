@@ -18,6 +18,44 @@ function setup() {
 }
 
 describe('safe queue storage', () => {
+	it('allows only the originating phone to process mobile pending work', async () => {
+		const { vault } = setup();
+		const phone = new QueueManager(vault, () => '_ShareToSave/queue', () => 'clips', 'phone-a');
+		const other = new QueueManager(vault, () => '_ShareToSave/queue', () => 'clips', 'phone-b');
+		await phone.appendEntry({ ...QueueManager.buildEntry('https://example.com', 'mobile'), target: 'mobile', originDevice: 'phone-a', allowDesktopFallback: true });
+		expect(await phone.getPendingEntries('mobile')).toHaveLength(1);
+		expect(await other.getPendingEntries('mobile')).toHaveLength(0);
+		expect(await other.getPendingEntries('desktop', true)).toHaveLength(0);
+	});
+	it('retains mobile failures and permits one optional desktop fallback', async () => {
+		const { queue, vault } = setup();
+		const desktop = new QueueManager(vault, () => '_ShareToSave/queue', () => 'clips');
+		await queue.appendEntry({ ...QueueManager.buildEntry('https://example.com', 'mobile'), target: 'mobile', allowDesktopFallback: true });
+		const entry = (await queue.getEntries())[0]!;
+		await queue.claim(entry);
+		await queue.finish(entry, 'mobile network failure');
+		expect(await desktop.getPendingEntries('desktop', false)).toHaveLength(0);
+		expect(await desktop.getPendingEntries('desktop', true)).toHaveLength(1);
+		expect(await desktop.claim(entry, true)).toBe(true);
+		await desktop.finish(entry, 'desktop also failed');
+		expect(await desktop.getPendingEntries('desktop', true)).toHaveLength(0);
+		expect((await queue.getEntries())[0]?.status).toBe('failed');
+	});
+	it('does not send successful mobile tasks to desktop', async () => {
+		const { queue } = setup();
+		await queue.appendEntry({ ...QueueManager.buildEntry('https://example.com', 'mobile'), target: 'mobile', allowDesktopFallback: true });
+		const entry = (await queue.getEntries())[0]!;
+		await queue.claim(entry); await queue.finish(entry);
+		expect(await queue.getPendingEntries('desktop', true)).toHaveLength(0);
+	});
+	it('permits only one claimant on a shared current filesystem', async () => {
+		const { queue, vault } = setup();
+		const other = new QueueManager(vault, () => '_ShareToSave/queue', () => 'clips');
+		await queue.appendEntry(QueueManager.buildEntry('https://example.com', 'desktop'));
+		const entry = (await queue.getEntries())[0]!;
+		const claimed = await Promise.all([queue.claim(entry), other.claim(entry)]);
+		expect(claimed.filter(Boolean)).toHaveLength(1);
+	});
 	it('never reads, modifies or deletes Web Clipper Markdown or attachments', async () => {
 		const { files, queue, adapter } = setup();
 		files.set('clips/web-clipper.md', '---\nsource: https://example.com\n---\nArticle ![[photo.png]]');

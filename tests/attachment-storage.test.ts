@@ -18,3 +18,10 @@ it('keeps custom attachments in the Vault and avoids overwriting existing media'
 	expect(await attachmentPath(app, settings, 'video.mp4', 'clips/note.md')).toBe('media/video-1.mp4');
 	await expect(attachmentPath(app, { ...settings, attachmentFolder: '../outside' }, 'image.png', 'clips/note.md')).rejects.toThrow();
 });
+
+it('rejects absolute folders and shared filenames containing path traversal', async () => {
+	const app = {} as App;
+	const settings = { attachmentPolicy: 'custom', attachmentFolder: 'C:/outside' } as ShareToSaveSettings;
+	await expect(attachmentPath(app, settings, 'image.png', 'clips/note.md')).rejects.toThrow();
+	await expect(attachmentPath(app, { ...settings, attachmentPolicy: 'obsidian' }, '../image.png', 'clips/note.md')).rejects.toThrow();
+});

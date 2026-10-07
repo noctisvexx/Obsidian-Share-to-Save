@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+// eslint-disable-next-line import/no-nodejs-modules -- The test runner executes in Node, not in Obsidian.
 import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
