@@ -63,6 +63,7 @@ export class ImageShareMenuInjector {
 		private app: App,
 		private getOutputFolder: () => string,
 		private t: Translator,
+		private getAttachmentPath?: (filename: string, sourcePath: string) => Promise<string>,
 	) {}
 
 	/**
@@ -270,7 +271,9 @@ export class ImageShareMenuInjector {
 		for (const file of files) {
 			try {
 				const filename = extractName(file);
-				const uniquePath = await this.resolveUniquePath(`${outputFolder}/${filename}`);
+				const uniquePath = this.getAttachmentPath
+					? await this.getAttachmentPath(filename, `${outputFolder}/Shared media.md`)
+					: await this.resolveUniquePath(`${outputFolder}/${filename}`);
 
 				const fileUrl = window.Capacitor?.convertFileSrc
 					? window.Capacitor.convertFileSrc(file.uri)

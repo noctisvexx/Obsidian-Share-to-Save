@@ -167,6 +167,7 @@ export class ImageHandler {
 		 * mid-session doesn't leave attachments writing to the stale folder
 		 */
 		private readonly getOutputFolder: () => string,
+		private readonly getAttachmentPath?: (filename: string, sourcePath: string) => Promise<string>,
 	) {}
 
 	/**
@@ -221,7 +222,7 @@ export class ImageHandler {
 		sourceUrl?: string,
 	): Promise<string> {
 		// 确保附件目录存在 / Ensure attachments directory exists
-		await this.ensureAttachmentsDir();
+		if (!this.getAttachmentPath) await this.ensureAttachmentsDir();
 
 		// 预处理：linked image 本地化后 wikilink 不支持嵌套在 markdown 链接中，
 		// 将 [![alt](img-url)](link-url) → ![alt](img-url)（丢弃外层链接 URL）
@@ -314,24 +315,30 @@ export class ImageHandler {
 			if (!result.buffer) continue;
 			const { full, url, buffer, contentType } = result;
 
-			const filename = buildStableFilename(url, {
+			let filename = buildStableFilename(url, {
 				titleBase: noteTitle,
 				fallbackName: 'image',
 				fallbackExt: '.png',
 				contentType,
 			});
 
-			const localPath = `${attachmentsDir}/${filename}`;
+			const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(buffer));
+			const contentHash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+			filename = `sts-${contentHash}${contentTypeToExt(contentType) || extractExtFromUrl(filename) || '.bin'}`;
+			const existingWikilink = dedupMap.get(contentHash);
+			if (existingWikilink) { markdown = markdown.replace(full, existingWikilink); continue; }
+			let localPath = this.getAttachmentPath
+				? await this.getAttachmentPath(filename, `${this.getOutputFolder()}/${noteTitle}.md`)
+				: `${attachmentsDir}/${filename}`;
+			if (await this.vault.adapter.exists(localPath) && !await this.existsWithSameContent(localPath, buffer)) {
+				let index = 1;
+				const base = localPath;
+				while (await this.vault.adapter.exists(localPath)) localPath = `${base}.${index++}`;
+			}
 
 			// 内容哈希去重：同一次批处理中相同内容复用第一个 wikilink
 			// Content hash dedup: same content within a batch reuses first wikilink
-			const contentHash = this.computeContentHash(buffer);
-			const existingWikilink = dedupMap.get(contentHash);
-			if (existingWikilink) {
-				markdown = markdown.replace(full, existingWikilink);
-				continue;
-			}
-			const wikilink = this.buildWikilink(filename, full.startsWith('!['));
+			const wikilink = `${full.startsWith('![') ? '!' : ''}[[${normalizePath(localPath)}]]`;
 			dedupMap.set(contentHash, wikilink);
 
 			// 去重：已存在且内容相同则跳过 / Dedup: skip if exists with same content

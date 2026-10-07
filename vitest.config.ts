@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   test: {
@@ -8,7 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // Mock obsidian API for tests / Mock obsidian API 用于测试
-      obsidian: new URL('tests/mocks/obsidian.ts', import.meta.url).pathname,
+      obsidian: fileURLToPath(new URL('tests/mocks/obsidian.ts', import.meta.url)),
     },
   },
 });

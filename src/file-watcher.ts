@@ -85,6 +85,7 @@ export class FileWatcher {
 	 */
 	private async check(): Promise<void> {
 		if (this.isProcessing) return;
+		this.isProcessing = true;
 
 		try {
 			const entries = await this.queueManager.getPendingEntries();
@@ -97,20 +98,21 @@ export class FileWatcher {
 			for (const entry of entries) {
 				// delete on start：处理前删除文件，防止重复处理
 				// delete on start: remove file before processing to prevent re-processing
-				await this.queueManager.removeEntry(entry.filePath);
+				if (!await this.queueManager.claim(entry)) continue;
 
 				try {
 					const result = await this.downloader.processUrl(entry.url, entry.id);
 					if (result.success) {
+						await this.queueManager.finish(entry);
 						showNotice(this.t('notice.savedTitle', { title: result.title ?? entry.url }));
 					} else {
-						await this.downloader.saveFailedNote(entry.url);
+						await this.queueManager.finish(entry, result.error || 'Content extraction failed');
 						this.debugLog(`提取失败 / Extraction failed: ${entry.url}`);
 					}
 				} catch (err) {
 					const errMsg = err instanceof Error ? err.message : String(err);
 					this.debugLog(`处理异常 / Processing exception: ${entry.url} - ${errMsg}`);
-					await this.downloader.saveFailedNote(entry.url);
+					await this.queueManager.finish(entry, errMsg);
 				}
 			}
 		} catch (err) {

@@ -12,6 +12,9 @@ import { validateFolderPath } from './text-utils';
 /** 默认设置 / Default settings */
 export const DEFAULT_SETTINGS: ShareToSaveSettings = {
 	outputFolder: 'Share-to-Save',
+	queueFolder: '_ShareToSave/queue',
+	attachmentPolicy: 'obsidian',
+	attachmentFolder: '_ShareToSave/attachments',
 	pollIntervalValue: 30,
 	pollIntervalUnit: 'seconds',
 	timestampFormat: 'h1',
@@ -33,6 +36,19 @@ export class ShareToSaveSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
+		for (const [key, label] of [['queueFolder', '任务保存目录 / Task folder'], ['attachmentFolder', '自定义附件目录 / Custom attachment folder']] as const) {
+			new Setting(containerEl).setName(label).addText(text => text.setValue(this.plugin.settings[key]).onChange(async value => {
+				if (validateFolderPath(value) || value.split('/').some(p => p === '..' || p === '.')) return;
+				if (key === 'queueFolder' && (value === this.plugin.settings.outputFolder || value.startsWith(this.plugin.settings.outputFolder + '/'))) return;
+				this.plugin.settings[key] = value.trim(); await this.plugin.saveSettings();
+			}));
+		}
+		new Setting(containerEl).setName('附件保存位置 / Attachment location').addDropdown(dropdown => dropdown
+			.addOption('obsidian', '遵循 Obsidian / Obsidian default').addOption('custom', '自定义目录 / Custom folder')
+			.setValue(this.plugin.settings.attachmentPolicy).onChange(async value => {
+				this.plugin.settings.attachmentPolicy = value as 'obsidian' | 'custom'; await this.plugin.saveSettings();
+			}));
+		new Setting(containerEl).setName('剪藏任务 / Clipping tasks').addButton(button => button.setIcon('list').setTooltip('查看 / View').onClick(() => this.plugin.showTasks()));
 
 		// ── 页面标题 / Page title ──
 		new Setting(containerEl)
@@ -82,6 +98,7 @@ export class ShareToSaveSettingTab extends PluginSettingTab {
 							return;
 						}
 						const trimmed = value.trim();
+						if (this.plugin.settings.queueFolder === trimmed || this.plugin.settings.queueFolder.startsWith(trimmed + '/')) return;
 						this.plugin.settings.outputFolder = trimmed;
 						await this.plugin.saveSettings();
 					})

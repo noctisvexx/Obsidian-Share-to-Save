@@ -105,8 +105,9 @@ export class Downloader {
 		private vault: Vault,
 		private settings: ShareToSaveSettings,
 		private t: Translator,
+		getAttachmentPath?: (filename: string, sourcePath: string) => Promise<string>,
 	) {
-		this.imageHandler = new ImageHandler(vault, () => settings.outputFolder);
+		this.imageHandler = new ImageHandler(vault, () => settings.outputFolder, getAttachmentPath);
 		this.headlessExtractor = new HeadlessExtractor();
 		this.siteHandlers = [
 			createWechatHandler(this.headlessExtractor),
@@ -120,6 +121,8 @@ export class Downloader {
 	 * Process a single URL: acquire HTML → pipeline → check extraction success → save/fail
 	 */
 	async processUrl(url: string, stsId: string): Promise<ProcessResult> {
+		const saved = await this.existingTaskNote(stsId);
+		if (saved) return saved;
 		const cleanUrl = Downloader.stripWeChatTrackingParams(url);
 		const { html, canonicalUrl } = await this.acquireHtml(cleanUrl);
 		if (!html) {
@@ -134,7 +137,7 @@ export class Downloader {
 		if (Downloader.isExtractionSuccessful(parsed)) {
 			return this.saveNote(parsed, canonicalUrl, stsId, cleanUrl);
 		}
-		return this.saveFailedNote(canonicalUrl, cleanUrl, stsId, parsed);
+		return { success: false, error: 'Content extraction was incomplete' };
 	}
 
 	/**
@@ -207,7 +210,9 @@ export class Downloader {
 	 * 统一下游保存逻辑：sanitize → frontmatter → images → vault
 	 * Unified downstream save: sanitize → frontmatter → images → vault
 	 */
-	private async saveNote(parsed: ParsedContent, canonicalUrl: string, stsId: string, inputUrl: string): Promise<ProcessResult> {
+	async saveNote(parsed: ParsedContent, canonicalUrl: string, stsId: string, inputUrl: string): Promise<ProcessResult> {
+		const saved = await this.existingTaskNote(stsId);
+		if (saved) return saved;
 		const safeTitle = Downloader.sanitizeNoteTitle(parsed.title || 'Untitled');
 
 		const frontmatter = Downloader.buildFrontmatter(parsed, inputUrl, stsId);
@@ -221,10 +226,28 @@ export class Downloader {
 		}
 
 		// 处理同名文件：递增编号 / Handle duplicate filenames: increment counter
-		const finalPath = await this.resolveUniquePath(safeTitle);
-		await this.vault.create(finalPath, mdContent);
+		const finalPath = this.taskNotePath(stsId);
+		try { await this.vault.create(finalPath, mdContent); }
+		catch (error) {
+			const existing = await this.existingTaskNote(stsId);
+			if (existing) return existing;
+			throw error;
+		}
 
 		return { success: true, title: safeTitle };
+	}
+
+	private taskNotePath(id: string): string {
+		if (!/^[\w-]{1,128}$/.test(id)) throw new Error('Invalid task ID');
+		return normalizePath(`${this.settings.outputFolder}/Clip-${id}.md`);
+	}
+
+	private async existingTaskNote(id: string): Promise<ProcessResult | null> {
+		const path = this.taskNotePath(id);
+		if (!await this.vault.adapter.exists(path)) return null;
+		const content = await this.vault.adapter.read(path);
+		if (!content.split('\n---', 1)[0]?.includes(`sts_id: "${id}"`)) throw new Error('Existing note path belongs to another note');
+		return { success: true, title: path.split('/').pop() };
 	}
 
 	/**

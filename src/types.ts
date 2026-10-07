@@ -5,6 +5,13 @@
 
 /** 队列条目 / Queue entry */
 export interface QueueEntry {
+	type: 'share-to-save';
+	version: 1;
+	status: 'pending' | 'processing' | 'failed' | 'completed';
+	updatedAt: string;
+	owner?: string;
+	leaseUntil?: string;
+	error?: string;
 	/** UUID v4 */
 	id: string;
 	/** 提取后的目标 URL / Extracted target URL */
@@ -44,6 +51,9 @@ export type TimestampFormat = 'h1' | 'h2' | 'h3' | 'body';
 export interface ShareToSaveSettings {
 	/** 输出文件夹名（默认 "Share-to-Save"）/ Output folder name (default "Share-to-Save") */
 	outputFolder: string;
+	queueFolder: string;
+	attachmentPolicy: 'obsidian' | 'custom';
+	attachmentFolder: string;
 	/** 轮询间隔数值（1-60）/ Poll interval value (1-60) */
 	pollIntervalValue: number;
 	/** 轮询间隔单位 / Poll interval unit */

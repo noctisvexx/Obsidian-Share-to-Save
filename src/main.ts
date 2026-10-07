@@ -23,6 +23,8 @@ import { ImageShareMenuInjector } from './image-share-injector';
 import { InputModal } from './input-modal';
 import { TextSaver } from './text-saver';
 import { showNotice } from './notice-utils';
+import { attachmentPath } from './attachment-storage';
+import { TaskModal } from './task-modal';
 
 export default class ShareToSavePlugin extends Plugin {
 	settings!: ShareToSaveSettings;
@@ -47,8 +49,8 @@ export default class ShareToSavePlugin extends Plugin {
 		// ── 初始化队列管理器 / Initialize queue manager ──
 		this.queueManager = new QueueManager(
 			this.app.vault,
+			() => this.settings.queueFolder,
 			() => this.settings.outputFolder,
-			this.app.metadataCache,
 		);
 
 		// ── 初始化文字保存器 / Initialize text saver ──
@@ -70,6 +72,7 @@ export default class ShareToSavePlugin extends Plugin {
 			this.app,
 			() => this.settings.outputFolder,
 			this.t,
+			(filename, sourcePath) => attachmentPath(this.app, this.settings, filename, sourcePath),
 		);
 		if (Platform.isMobile) {
 			this.imageShareInjector.start();
@@ -81,6 +84,7 @@ export default class ShareToSavePlugin extends Plugin {
 				this.app.vault,
 				this.settings,
 				this.t,
+				(filename, sourcePath) => attachmentPath(this.app, this.settings, filename, sourcePath),
 			);
 
 			this.fileWatcher = new FileWatcher(
@@ -115,9 +119,11 @@ export default class ShareToSavePlugin extends Plugin {
 		// ── 自定义 URI 协议处理 / Custom URI protocol handler ──
 		// 支持 obsidian://share-to-save 快速唤起 URL 输入框（Android 桌面快捷方式等）
 		// Supports obsidian://share-to-save to quickly open the URL input modal (Android shortcuts, etc.)
-		this.registerObsidianProtocolHandler('share-to-save', async () => {
-			await this.openInputModal();
+		this.registerObsidianProtocolHandler('share-to-save', async (params) => {
+			if (params.url || params.text) await this.handleUrlInput(params.url || params.text || '');
+			else await this.openInputModal();
 		});
+		this.addCommand({ id: 'view-tasks', name: '查看剪藏任务 / View clipping tasks', callback: () => this.showTasks() });
 
 		// ── 设置页 / Settings tab ──
 		this.addSettingTab(new ShareToSaveSettingTab(this.app, this, this.t));
@@ -280,9 +286,15 @@ export default class ShareToSavePlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<ShareToSaveSettings>);
+		if (this.settings.queueFolder === this.settings.outputFolder || this.settings.queueFolder.startsWith(this.settings.outputFolder + '/'))
+			this.settings.queueFolder = DEFAULT_SETTINGS.queueFolder;
 	}
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+	}
+
+	showTasks(): void {
+		new TaskModal(this.app, this.queueManager, () => this.fileWatcher?.processNow() ?? Promise.resolve()).open();
 	}
 }
