@@ -36,8 +36,8 @@ it('saves again after explicit deletion through enqueue, processing and the shar
 	expect(files.get('clips/Article.md')).toBeDefined();
 	expect(files.get('clips/Article.md')).not.toBe(first);
 	expect([...files.keys()].filter(path => path.endsWith('.md'))).toHaveLength(1);
-	expect((await queue.getEntries()).map(entry => entry.status)).toEqual(['completed', 'completed']);
-	expect(await queue.enqueue(request)).toBe('existing');
+	expect(await queue.getEntries()).toEqual([]);
+	expect(await queue.enqueue(request)).toBe('queued');
 });
 
 it('retains a mobile HTTP failure, retries it by hand and confirms only one note', async () => {
@@ -55,8 +55,28 @@ it('retains a mobile HTTP failure, retries it by hand and confirms only one note
 		return { success: true };
 	});
 	await queue.retry(task, 'mobile'); await watcher.processNow(); await watcher.processNow();
-	expect((await queue.getEntries())[0]?.status).toBe('completed');
+	expect(await queue.getEntries()).toEqual([]);
 	expect([...files.keys()].filter(path => path.endsWith('.md'))).toHaveLength(1);
+});
+
+it('retries a failure after note creation using the same ID without making another note', async () => {
+	const { queue, pipeline, files } = setup();
+	await queue.enqueue({ ...QueueManager.buildEntry('https://example.com', 'desktop'), target: 'desktop', noteFolder: 'clips' });
+	let interrupted = true;
+	vi.spyOn(pipeline, 'processUrl').mockImplementation(async (url, id, folder) => {
+		const result = await pipeline.saveNote({ title: 'Saved once', author: '', published: '', content: 'A real saved body before an interrupted acknowledgement.', imageUrls: [] }, url, id, url, folder);
+		if (interrupted) { interrupted = false; throw Error('Interrupted after saving'); }
+		return result;
+	});
+	const watcher = new FileWatcher(queue, pipeline, vi.fn(), () => 1000, t, 'desktop');
+	await watcher.processNow();
+	const failed = (await queue.getEntries())[0]!;
+	expect(failed.status).toBe('failed');
+	const original = files.get('clips/Saved once.md');
+	await queue.retry(failed, 'desktop'); await watcher.processNow();
+	expect(await queue.getEntries()).toEqual([]);
+	expect([...files.keys()]).toEqual(['clips/Saved once.md']);
+	expect(files.get('clips/Saved once.md')).toBe(original);
 });
 
 it('desktop fallback consumes a mobile failure only when allowed and uses the same saver', async () => {
@@ -72,9 +92,9 @@ it('desktop fallback consumes a mobile failure only when allowed and uses the sa
 	const desktop = new FileWatcher(queue, pipeline, vi.fn(), () => 1000, t, 'desktop', () => enabled);
 	await desktop.processNow(); expect(desktopProcess).not.toHaveBeenCalled();
 	enabled = true; await desktop.processNow(); await desktop.processNow();
-	expect(desktopProcess).toHaveBeenCalledOnce(); expect((await queue.getEntries())[0]?.status).toBe('completed');
+	expect(desktopProcess).toHaveBeenCalledOnce(); expect(await queue.getEntries()).toEqual([]);
 	expect(files.has('original/Recovered.md')).toBe(true);
 	expect(files.get('clips/web-clipper.md')).toBe(oldMarkdown); expect(files.get('media/old.png')).toBe(oldBinary);
 	expect(files.get('clips/plain.md')).toBe('[URL](https://example.com)');
-	expect(adapter.remove.mock.calls.every(([path]) => path.endsWith('.claim'))).toBe(true);
+	expect(adapter.remove.mock.calls.every(([path]) => path.startsWith('_ShareToSave/queue/'))).toBe(true);
 });

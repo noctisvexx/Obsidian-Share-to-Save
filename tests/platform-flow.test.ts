@@ -38,13 +38,15 @@ it.each(cases)('dispatches $platform through the registered resolver, queue and 
 	await queue.enqueue({ ...QueueManager.buildEntry(sample.url, 'mobile'), target: 'mobile', originDevice: 'phone', noteFolder: 'clips', allowDesktopFallback: true });
 	const watcher = new FileWatcher(queue, clipper, vi.fn(), () => 1000, t, 'mobile');
 	await watcher.processNow();
-	expect((await queue.getEntries())[0]?.status).toBe('completed');
+	expect(await queue.getEntries()).toEqual([]);
 	expect(storage.files.get(`clips/${sample.title}.md`)).toContain('sts_id:');
 	expect(storage.files.get(`clips/${sample.title}.md`)).toContain('![[media/sts-');
 	expect(storage.files.get('clips/Existing.md')).toBe('Original user note');
 	const count = network.mock.calls.length;
-	expect(await queue.enqueue({ ...QueueManager.buildEntry(sample.url, 'mobile'), noteFolder: 'clips' })).toBe('existing');
-	await watcher.processNow(); expect(network).toHaveBeenCalledTimes(count);
+	expect(await queue.enqueue({ ...QueueManager.buildEntry(sample.url, 'mobile'), target: 'mobile', originDevice: 'phone', noteFolder: 'clips' })).toBe('queued');
+	await watcher.processNow(); expect(network.mock.calls.length).toBeGreaterThan(count);
+	expect([...storage.files.keys()].filter(path => path.endsWith('.md'))).toHaveLength(3);
+	expect(await queue.getEntries()).toEqual([]);
 });
 it.each(cases)('retains an HTTP-200 login failure for $platform without writing a note', async sample => {
 	const storage = testVault();

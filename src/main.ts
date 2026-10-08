@@ -164,9 +164,8 @@ export default class ShareToSavePlugin extends Plugin {
 		}
 
 		try {
-			const status = await this.enqueueUrl(url);
-			showNotice(status === 'existing' ? '文章已保存，无需重复剪藏 / Article already saved'
-				: '任务已接收，可在剪藏任务中查看结果 / Task received; see clipping tasks');
+			await this.enqueueUrl(url);
+			showNotice('已接收剪藏任务 / Clipping task received');
 			if (Platform.isDesktop || this.settings.mobileFirst) await this.fileWatcher?.processNow();
 		} catch (error) {
 			showNotice(this.t('notice.downloadFailed', { error: error instanceof Error ? error.message : String(error) }), 5000);
@@ -292,7 +291,7 @@ export default class ShareToSavePlugin extends Plugin {
 			() => Platform.isMobile && this.settings.mobileFirst ? 'mobile' : 'desktop').open();
 	}
 
-	private async enqueueUrl(url: string): Promise<'queued' | 'existing'> {
+	private async enqueueUrl(url: string): Promise<'queued'> {
 		const entry = QueueManager.buildEntry(url, Platform.isDesktop ? 'desktop' : 'mobile');
 		entry.target = Platform.isMobile && this.settings.mobileFirst ? 'mobile' : 'desktop';
 		entry.originDevice = this.settings.deviceId;

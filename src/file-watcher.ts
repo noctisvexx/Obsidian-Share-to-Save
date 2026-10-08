@@ -127,6 +127,7 @@ export class FileWatcher {
 					}
 					await this.queueManager.finish(entry, result.success ? undefined : result.error || 'Content extraction failed', result.warnings?.join('; '));
 					if (!this.stopped) showNotice(result.success ? this.t('notice.savedTitle', { title: result.title ?? entry.url })
+						+ (result.warnings?.length ? '\n部分附件未下载，笔记保留远程链接 / Some attachments remain remote' : '')
 						: this.t('notice.downloadFailed', { error: result.error || 'Content extraction failed' }));
 				} catch (err) {
 					const errMsg = err instanceof Error ? err.message : String(err);

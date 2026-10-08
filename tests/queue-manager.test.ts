@@ -18,26 +18,25 @@ function setup() {
 }
 
 describe('safe queue storage', () => {
-	it.each(['https://mp.weixin.qq.com/s?mid=123', 'https://www.xiaohongshu.com/explore/123', 'https://zhuanlan.zhihu.com/p/123', 'https://example.com/article'])('explicitly re-clips a deleted completed result for %s without deleting receipts', async url => {
+	it.each(['https://mp.weixin.qq.com/s?mid=123', 'https://www.xiaohongshu.com/explore/123', 'https://zhuanlan.zhihu.com/p/123', 'https://example.com/article'])('treats another explicit share of a successful %s as a fresh task', async url => {
 		const { queue, files } = setup();
 		const request = { ...QueueManager.buildEntry(url, 'desktop'), target: 'desktop' as const, noteFolder: 'clips' };
 		await queue.enqueue(request);
 		const original = (await queue.getEntries())[0]!;
 		files.set('clips/Article.md', `---\nsts_id: ${original.id}\n---\nArticle`);
 		await queue.claim(original); await queue.finish(original);
-		const receipt = files.get(original.filePath + '.done');
-		expect(await queue.enqueue(request)).toBe('existing');
-		files.delete('clips/Article.md');
+		expect(await queue.getEntries()).toEqual([]);
+		expect([...files.keys()].filter(path => path.startsWith('_ShareToSave/queue/'))).toEqual([]);
 		await queue.enqueue(request); await queue.enqueue(request);
 		const pending = await queue.getPendingEntries('desktop');
 		expect(pending).toHaveLength(1);
 		expect(pending[0]?.id).not.toBe(original.id);
-		expect(files.get(original.filePath + '.done')).toBe(receipt);
+		expect(files.get('clips/Article.md')).toContain(original.id);
 		await queue.claim(pending[0]!); await queue.finish(pending[0]!, 'network failure');
 		await queue.enqueue(request);
 		expect((await queue.getPendingEntries('desktop'))[0]?.id).toBe(pending[0]?.id);
 	});
-	it('does not re-clip a renamed task-owned note or change a foreign same-title note', async () => {
+	it('allows a new share without reading or changing previous or foreign notes', async () => {
 		const { queue, files } = setup();
 		const request = { ...QueueManager.buildEntry('https://example.com', 'desktop'), noteFolder: 'clips' };
 		await queue.enqueue(request);
@@ -45,23 +44,27 @@ describe('safe queue storage', () => {
 		await queue.claim(entry); await queue.finish(entry);
 		files.set('clips/Renamed.md', `---\nsts_id: ${entry.id}\n---\nSaved`);
 		files.set('clips/Article.md', 'Foreign note');
-		expect(await queue.enqueue(request)).toBe('existing');
-		expect(await queue.getPendingEntries()).toHaveLength(0);
+		expect(await queue.enqueue(request)).toBe('queued');
+		expect(await queue.getPendingEntries()).toHaveLength(1);
 		expect(files.get('clips/Article.md')).toBe('Foreign note');
 	});
-	it('deduplicates repeated shares including offline producers using deterministic IDs', async () => {
+	it('merges concurrent local shares only while their task is unfinished', async () => {
 		const a = setup(); const b = setup();
-		await a.queue.enqueue({ ...QueueManager.buildEntry('https://example.com/post?utm_source=phone', 'mobile'), noteFolder: 'clips' });
-		await a.queue.enqueue({ ...QueueManager.buildEntry('https://example.com/post', 'desktop'), noteFolder: 'clips' });
+		await Promise.all([
+			a.queue.enqueue({ ...QueueManager.buildEntry('https://example.com/post?utm_source=phone', 'mobile'), noteFolder: 'clips' }),
+			a.queue.enqueue({ ...QueueManager.buildEntry('https://example.com/post', 'desktop'), noteFolder: 'clips' }),
+		]);
 		await b.queue.enqueue({ ...QueueManager.buildEntry('https://example.com/post', 'desktop'), noteFolder: 'clips' });
 		expect(await a.queue.getEntries()).toHaveLength(1);
-		expect((await a.queue.getEntries())[0]?.id).toBe((await b.queue.getEntries())[0]?.id);
+		expect((await a.queue.getEntries())[0]?.id).not.toBe((await b.queue.getEntries())[0]?.id);
 	});
-	it('keeps success authoritative when sync restores stale pending or failed state', async () => {
-		const { queue, files } = setup();
+	it('uses a temporary success receipt to prevent processing again while cleanup is blocked', async () => {
+		const { queue, files, adapter } = setup();
 		await queue.appendEntry(QueueManager.buildEntry('https://example.com', 'desktop'));
 		const entry = (await queue.getEntries())[0]!;
-		await queue.claim(entry); await queue.finish(entry);
+		await queue.claim(entry);
+		adapter.remove.mockRejectedValue(Error('cleanup blocked'));
+		await queue.finish(entry);
 		for (const status of ['pending', 'failed'] as const) {
 			files.set(entry.filePath, JSON.stringify({ ...entry, status, allowDesktopFallback: true }));
 			expect((await queue.getEntries())[0]?.status).toBe('completed');
@@ -69,6 +72,9 @@ describe('safe queue storage', () => {
 			await queue.retry(entry);
 			expect(await queue.getPendingEntries('desktop', true)).toHaveLength(0);
 		}
+		adapter.remove.mockImplementation(async path => { files.delete(path); });
+		expect(await queue.getEntries()).toEqual([]);
+		expect(files.size).toBe(0);
 	});
 	it('retains completion when acknowledgement fails after the note has been saved', async () => {
 		const { queue, vault } = setup();
@@ -77,7 +83,65 @@ describe('safe queue storage', () => {
 		await queue.claim(entry);
 		vault.adapter.write = vi.fn().mockRejectedValue(Error('sync write failed'));
 		await expect(queue.finish(entry)).rejects.toThrow();
+		expect(await queue.getEntries()).toEqual([]);
+	});
+	it.each(['', '.claim', '.done'])('recovers partial successful cleanup at %s without touching notes', async suffix => {
+		const { queue, files, vault, adapter } = setup();
+		await queue.enqueue(QueueManager.buildEntry('https://example.com', 'desktop'));
+		const entry = (await queue.getEntries())[0]!;
+		files.set('clips/Saved.md', `---\nsts_id: ${entry.id}\n---\nUser result`);
+		const saved = files.get('clips/Saved.md');
+		await queue.claim(entry);
+		let blocked = true;
+		adapter.remove.mockImplementation(async path => {
+			if (blocked && path === entry.filePath + suffix) throw Error('temporary storage failure');
+			files.delete(path);
+		});
+		await queue.finish(entry);
+		expect(files.has(entry.filePath + '.done')).toBe(true);
+		expect(await queue.getPendingEntries()).toEqual([]);
+		blocked = false;
+		const restarted = new QueueManager(vault, () => '_ShareToSave/queue', () => 'clips');
+		expect(await restarted.getEntries()).toEqual([]);
+		expect([...files.keys()]).toEqual(['clips/Saved.md']);
+		expect(files.get('clips/Saved.md')).toBe(saved);
+	});
+	it('cleans old successful receipts but preserves failed and unknown data', async () => {
+		const { queue, files } = setup();
+		const completed = { ...QueueManager.buildEntry('https://example.com/old', 'desktop'), status: 'completed' as const };
+		const failed = { ...QueueManager.buildEntry('https://example.com/failed', 'mobile'), status: 'failed' as const, error: 'Unavailable' };
+		await queue.appendEntry(completed); await queue.appendEntry(failed);
+		files.set(`_ShareToSave/queue/${completed.id}.json.done`, JSON.stringify(completed));
+		files.set('_ShareToSave/queue/unknown.json.done', '{"not":"a task"}');
+		expect(await queue.getEntries()).toHaveLength(1);
+		expect(files.has(`_ShareToSave/queue/${completed.id}.json`)).toBe(false);
+		expect(files.has(`_ShareToSave/queue/${failed.id}.json`)).toBe(true);
+		expect(files.has('_ShareToSave/queue/unknown.json.done')).toBe(true);
+	});
+	it('preserves a conflicting claim and task instead of deleting unconfirmed data', async () => {
+		const { queue, files } = setup();
+		const completed = { ...QueueManager.buildEntry('https://example.com', 'desktop'), status: 'completed' as const, owner: 'original' };
+		await queue.appendEntry(completed);
+		files.set(`_ShareToSave/queue/${completed.id}.json.claim`, JSON.stringify({ owner: 'someone-else' }));
+		const before = [...files];
+		expect(await queue.getEntries()).toHaveLength(1);
+		expect([...files]).toEqual(before); expect(queue.getIssues()).toHaveLength(1);
+	});
+	it('does not clean a receipt while its completion write is still running', async () => {
+		const { queue, files, vault } = setup();
+		await queue.enqueue(QueueManager.buildEntry('https://example.com', 'desktop'));
+		const entry = (await queue.getEntries())[0]!; await queue.claim(entry);
+		let release!: () => void;
+		const write = vi.fn(async (path: string, text: string) => {
+			await new Promise<void>(resolve => { release = resolve; }); files.set(path, text);
+		});
+		vault.adapter.write = write;
+		const finishing = queue.finish(entry);
+		await vi.waitFor(() => expect(write).toHaveBeenCalled());
 		expect((await queue.getEntries())[0]?.status).toBe('completed');
+		expect(files.has(entry.filePath + '.done')).toBe(true);
+		release(); await finishing;
+		expect(files.size).toBe(0);
 	});
 	it('preserves sync-conflict copies and reports them without processing twice', async () => {
 		const { queue, files } = setup();

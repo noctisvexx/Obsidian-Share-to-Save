@@ -3,6 +3,7 @@ import { FileWatcher } from '../src/file-watcher';
 import type { QueueManager } from '../src/queue-manager';
 import type { Downloader } from '../src/downloader';
 import type { Translator } from '../src/i18n';
+import { showNotice } from '../src/notice-utils';
 vi.mock('../src/notice-utils', () => ({ showNotice: vi.fn() }));
 beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window', globalThis); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -64,4 +65,11 @@ it.each([false, true])('acknowledges only after processing (success=%s)', async 
 	const watcher = new FileWatcher(queue, downloader, vi.fn(), () => 1000, ((key: string) => key) as Translator);
 	await (watcher as unknown as { check(): Promise<void> }).check();
 	expect(calls).toEqual(['claim', 'process', success ? 'completed' : 'failed']);
+});
+
+it('shows attachment warnings immediately even when successful tasks are cleaned', async () => {
+	const queue = { getPendingEntries: async () => [{ id: 'task', url: 'https://example.com' }], claim: async () => true, finish: async () => {} } as unknown as QueueManager;
+	const processor = { processUrl: async () => ({ success: true, title: 'Article', warnings: ['image could not be downloaded'] }) };
+	await new FileWatcher(queue, processor, vi.fn(), () => 1000, ((key: string) => key) as Translator).processNow();
+	expect(showNotice).toHaveBeenCalledWith(expect.stringContaining('Some attachments remain remote'));
 });

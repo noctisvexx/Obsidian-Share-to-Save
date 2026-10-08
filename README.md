@@ -34,7 +34,8 @@ Markdown 和附件；电脑只用于桌面剪藏或可选失败兜底，不要�
 
 Android 分享链接到 Obsidian 后，选择本插件保存网页；也可在插件输入框粘贴
 链接。桌面使用插件按钮或命令输入网址。在设置的“剪藏任务”或“查看剪藏任务”
-命令中查看状态、错误及附件警告，手动重试失败任务；中断任务可在租约到期后重试。
+命令中查看尚未完成的任务及错误，手动重试失败任务；中断任务可在租约到期后重试。
+成功会即时提示并清理任务，不保留成功历史；附件未全部下载时在保存提示中提醒。
 
 | 设置 | 默认与含义 |
 | --- | --- |
@@ -50,9 +51,13 @@ Android 分享链接到 Obsidian 后，选择本插件保存网页；也可在�
 设置检查任务目录。建议只指定一台自动兜底电脑。
 
 笔记优先用清理后的标题命名，同名以任务 ID 区分，不覆盖用户笔记。YAML 的
-`sts_id` 用于重试去重；删除保存的笔记后主动重新分享可以再次剪藏。移动笔记
-或删除 sts_id 可能导致识别失效。附件按内容哈希复用，不自动清理旧附件。
-失败任务保留；旧 `toBeSaved_*.json` 只在确认迁移副本后移除。普通 Markdown、
+`sts_id` 仅保护同一任务的处理/失败重试，不用于永久链接去重。成功后再次主动
+分享同一链接就是新任务，可保存另一篇笔记，无需先删除旧笔记。处理中重复分享
+合并到尚未完成的任务；失败任务重试保留原 ID。移动失败任务已写出的笔记或删除
+其 sts_id 可能导致重试识别失效。附件仍按内容哈希复用，不自动清理旧附件。
+成功确认后清理任务 JSON、锁和临时确认文件；中断的清理及旧成功记录在下次显式
+任务检查时恢复，不新增手机后台轮询。失败、未知及冲突任务保留，不建立永久
+去重数据库。旧 `toBeSaved_*.json` 只在确认迁移副本后移除。普通 Markdown、
 Web Clipper 笔记不用于发现任务，也不会被转换或删除。处理具体任务时会只读
 检查输出目录的 sts_id，这不是全库扫描。
 
@@ -82,8 +87,10 @@ Web Clipper 笔记不用于发现任务，也不会被转换或删除。处理�
   桌面兜底不自动拥有浏览器 Cookie，也不保证能解决访问限制。
 - 浏览器扩展、已授权页面主动提取及结构化内容包导入尚未实现，列为后续计划。
 - 图片失败可能保留远程链接并记录警告；保存成功不等于附件全部离线可用。
-- 文件同步不是分布式事务。任务锁、确认文件和稳定 ID 降低重复风险，但两台
-  离线设备同时处理后仍可能同步冲突，不能承诺绝不重复。
+- 本插件现在按单手机使用简化任务生命周期，不做永久或跨设备链接去重。只在
+  手机剪藏时可关闭桌面兜底、在同步工具中排除 `_ShareToSave/queue`，同时同步
+  笔记和真实附件目录。排除整个 `_ShareToSave` 可能同时排除自定义附件。
+  若仍需桌面失败兜底，必须同步未完成任务，且异步同步不保证绝不重复。
 - 任务和笔记包含分享链接及正文，可能含平台必需参数。不要分享携带账户凭据的
   链接；插件没有读取浏览器 Cookie、密码或认证 Token 的功能。
 - 依赖告警尚未清零，包括 Defuddle 及预打包 XML 组件的风险。不能将本候选版
@@ -111,9 +118,11 @@ fork of chenxiccc's Share to Save, not an upstream release. The original MIT
 attribution is retained. Install the built main.js, manifest.json and styles.css
 into .obsidian/plugins/share-to-clipper/ on each device. Disable the old
 share-to-save plugin first. This independent ID does not automatically migrate
-old settings. Preserve existing settings
-and tasks when updating. Sync notes, attachments and the complete isolated task
-folder using your existing Vault sync. Failed tasks are retained and retryable.
+old settings. Preserve existing settings and unfinished tasks when updating.
+Successful tasks and temporary acknowledgements are cleaned; another explicit
+share is a new task. Failed tasks retain their IDs for safe retries. There is no
+permanent URL dedup database. Phone-only users can sync just notes and attachments;
+desktop fallback requires syncing unfinished tasks and still has sync limitations.
 Existing Markdown is never used for task discovery. Authenticated browser
 extraction is a future design, not an implemented feature. Login/age/CAPTCHA
 restrictions are not bypassed. Android coverage and remaining dependency risks
