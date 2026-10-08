@@ -28,3 +28,25 @@ Production files: `src/platforms/{shared,bilibili}.ts`, `src/{mobile-clipper,typ
 Tests: `tests/bilibili.test.ts`. Shared helpers parse bounded JSON trees and do
 not execute scripts. Explicit structured post/video classification allows short
 real captions while retaining article validation and access-wall checks.
+
+## Douyin
+
+Implemented: video/note/share URLs, modal_id, aweme_id and v.douyin short links
+when redirects or SSR expose the item ID. Public RENDER_DATA and _ROUTER_DATA
+are parsed without executing scripts; iesdouyin public share HTML is an alternate
+source only when the first source did not explicitly deny access. Captions,
+author, timestamp, gallery candidates and video-cover candidates use the shared
+saver; no video stream download or watermark rewriting.
+
+The user's v.douyin.com/8cyII4FOzNg redirected to video/7692403146391898021 but
+returned a JavaScript verification shell; iesdouyin returned the same shell.
+This sample is NOT successfully supported in the current anonymous environment.
+The task fails clearly and remains available for retry/desktop fallback. No
+verification script, signatures, session cookies or private API are used.
+
+Acceptance: 113 tests passed (one skipped), TypeScript/build/lint passed.
+Nine independent Douyin cases use documented public loader/RENDER_DATA shapes,
+with illustrative values; these are NOT successful live page captures. The real
+verification-shell marker was checked separately. Android has not been tested.
+Changed: `src/platforms/douyin.ts`, platform access-wall helpers, registry entry,
+`tests/douyin.test.ts` and this report.

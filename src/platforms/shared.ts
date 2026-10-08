@@ -4,6 +4,7 @@ import { QualityValidator } from '../quality-validator';
 export interface Page { text: string; url: string; headers: Record<string, string> }
 export type FetchPage = (url: string, referer?: string) => Promise<Page>;
 export type Data = Record<string, unknown>;
+export class AccessError extends Error {}
 export function object(value: unknown): Data { return value && typeof value === 'object' && !Array.isArray(value) ? value as Data : {}; }
 export function list(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 export function string(value: unknown): string { return typeof value === 'string' ? value : ''; }
@@ -67,18 +68,21 @@ export function payloads(html: string): unknown[] {
 export function publicPage(page: Page): void {
 	const doc = new DOMParser().parseFromString(page.text, 'text/html');
 	const title = doc.querySelector('title')?.textContent?.trim() || '';
+	const description = doc.querySelector('meta[property="og:description"]')?.getAttribute('content') || '';
 	doc.querySelectorAll('script, style').forEach(el => el.remove());
 	const body = doc.body.textContent?.trim() || '';
-	if (/\/(?:accounts\/login|login|challenge|checkpoint)(?:\/|$)/.test(new URL(page.url).pathname)
+	if (doc.querySelector('meta[name="rating"]')?.getAttribute('content') === 'adult'
+		|| /age-restricted|you.?ll need to log in|sign in to (?:view|continue)|content (?:is not|isn't) available/i.test(description)
+		|| /\/(?:accounts\/login|login|challenge|checkpoint)(?:\/|$)/.test(new URL(page.url).pathname)
 		|| /^(?:login|log in|sign in|access denied|just a moment|登录|安全验证|验证码)/i.test(title)
 		|| (body.length < 500 && /verify you are human|captcha|登录后查看|请完成验证|访问过于频繁|内容不存在|视频已删除|page isn't available/i.test(body)))
-		throw new Error('Public content unavailable: login, verification, restriction or deleted content');
+		throw new AccessError('Public content unavailable: login, verification, age restriction or deleted content');
 }
 export async function fallback(steps: (() => Promise<ParsedContent>)[]): Promise<ParsedContent> {
 	const errors: string[] = [];
 	for (const step of steps) {
 		try { const parsed = await step(); const quality = QualityValidator.validate(parsed); if (quality.valid) return parsed; errors.push(quality.reason || 'Incomplete content'); }
-		catch (error) { errors.push(error instanceof Error ? error.message : String(error)); }
+		catch (error) { if (error instanceof AccessError) throw error; errors.push(error instanceof Error ? error.message : String(error)); }
 	}
 	throw new Error(errors.join('; '));
 }
