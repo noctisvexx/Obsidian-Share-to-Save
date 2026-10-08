@@ -18,6 +18,86 @@ function setup() {
 }
 
 describe('safe queue storage', () => {
+	it('deduplicates repeated shares including offline producers using deterministic IDs', async () => {
+		const a = setup(); const b = setup();
+		await a.queue.enqueue({ ...QueueManager.buildEntry('https://example.com/post?utm_source=phone', 'mobile'), noteFolder: 'clips' });
+		await a.queue.enqueue({ ...QueueManager.buildEntry('https://example.com/post', 'desktop'), noteFolder: 'clips' });
+		await b.queue.enqueue({ ...QueueManager.buildEntry('https://example.com/post', 'desktop'), noteFolder: 'clips' });
+		expect(await a.queue.getEntries()).toHaveLength(1);
+		expect((await a.queue.getEntries())[0]?.id).toBe((await b.queue.getEntries())[0]?.id);
+	});
+	it('keeps success authoritative when sync restores stale pending or failed state', async () => {
+		const { queue, files } = setup();
+		await queue.appendEntry(QueueManager.buildEntry('https://example.com', 'desktop'));
+		const entry = (await queue.getEntries())[0]!;
+		await queue.claim(entry); await queue.finish(entry);
+		for (const status of ['pending', 'failed'] as const) {
+			files.set(entry.filePath, JSON.stringify({ ...entry, status, allowDesktopFallback: true }));
+			expect((await queue.getEntries())[0]?.status).toBe('completed');
+			expect(await queue.claim(entry, true)).toBe(false);
+			await queue.retry(entry);
+			expect(await queue.getPendingEntries('desktop', true)).toHaveLength(0);
+		}
+	});
+	it('retains completion when acknowledgement fails after the note has been saved', async () => {
+		const { queue, vault } = setup();
+		await queue.appendEntry(QueueManager.buildEntry('https://example.com', 'desktop'));
+		const entry = (await queue.getEntries())[0]!;
+		await queue.claim(entry);
+		vault.adapter.write = vi.fn().mockRejectedValue(Error('sync write failed'));
+		await expect(queue.finish(entry)).rejects.toThrow();
+		expect((await queue.getEntries())[0]?.status).toBe('completed');
+	});
+	it('preserves sync-conflict copies and reports them without processing twice', async () => {
+		const { queue, files } = setup();
+		const entry = QueueManager.buildEntry('https://example.com', 'desktop');
+		await queue.appendEntry(entry);
+		files.set('_ShareToSave/queue/conflict-copy.json', JSON.stringify(entry));
+		expect(await queue.getPendingEntries()).toHaveLength(1);
+		expect(queue.getIssues()).toHaveLength(1);
+		expect(files.has('_ShareToSave/queue/conflict-copy.json')).toBe(true);
+	});
+	it('refuses forged mutation paths and unknown task data', async () => {
+		const { queue, files } = setup();
+		const foreign = 'clips/ordinary.json';
+		files.set(foreign, '{"important":"user data"}');
+		const entry = { ...QueueManager.buildEntry('https://example.com', 'desktop'), filePath: foreign };
+		await expect(queue.retry(entry)).rejects.toThrow('canonical');
+		await expect(queue.claim(entry)).rejects.toThrow('canonical');
+		expect(files.get(foreign)).toBe('{"important":"user data"}');
+	});
+	it('leaves legacy source intact if it changes while migration is in progress', async () => {
+		const { queue, files, vault } = setup();
+		const path = 'clips/toBeSaved_old.json';
+		const old = { id: 'old-id', url: 'https://example.com', source: 'mobile', createdAt: new Date().toISOString() };
+		files.set(path, JSON.stringify(old));
+		vault.create = vi.fn(async (newPath: string, content: string) => {
+			files.set(newPath, content); files.set(path, JSON.stringify({ ...old, url: 'https://example.org/new' }));
+			return {} as never;
+		});
+		await queue.getEntries();
+		expect(files.get(path)).toContain('example.org/new');
+	});
+	it('releases its own claim when the processing-state write fails', async () => {
+		const { queue, files, vault } = setup();
+		await queue.appendEntry(QueueManager.buildEntry('https://example.com', 'desktop'));
+		const entry = (await queue.getEntries())[0]!;
+		vault.adapter.write = vi.fn().mockRejectedValue(Error('disk full'));
+		await expect(queue.claim(entry)).rejects.toThrow();
+		expect(files.has(entry.filePath + '.claim')).toBe(false);
+		expect((await queue.getEntries())[0]?.status).toBe('pending');
+	});
+	it('allows interrupted work to be retried only after both leases expire', async () => {
+		const { queue, files } = setup();
+		await queue.appendEntry(QueueManager.buildEntry('https://example.com', 'desktop'));
+		const entry = (await queue.getEntries())[0]!;
+		await queue.claim(entry); await queue.retry(entry);
+		expect((await queue.getEntries())[0]?.status).toBe('processing');
+		files.set(entry.filePath, JSON.stringify({ ...entry, status: 'processing', leaseUntil: '2000-01-01T00:00:00Z' }));
+		files.set(entry.filePath + '.claim', JSON.stringify({ leaseUntil: '2000-01-01T00:00:00Z' }));
+		await queue.retry(entry, 'mobile');
+		expect((await queue.getEntries())[0]).toMatchObject({ status: 'pending', target: 'mobile' });
+	});
 	it('allows only the originating phone to process mobile pending work', async () => {
 		const { vault } = setup();
 		const phone = new QueueManager(vault, () => '_ShareToSave/queue', () => 'clips', 'phone-a');

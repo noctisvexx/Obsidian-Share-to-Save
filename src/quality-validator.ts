@@ -3,9 +3,9 @@ import type { ParsedContent } from './types';
 export class QualityValidator {
 	static validate(parsed: ParsedContent): { valid: boolean; reason?: string; score: number } {
 		const text = parsed.content.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/[#*_>`]/g, '').trim();
-		const blocked = /^(?:log in|sign in|login required|access denied|page not found|打开\s*app|请登录|登录后|内容不存在|访问受限)/i;
+		const blocked = /^(?:log in|sign in|login required|access denied|page not found|404\b|403\b|just a moment|checking your browser|打开\s*app|请登录|登录后|内容不存在|访问受限|安全验证)/i;
 		const placeholders = /(打开\s*app\s*(?:查看|阅读)|open (?:in |the )?app to|sign in to (?:continue|view|read)|登录后(?:查看|阅读))/i;
-		if ((blocked.test(parsed.title.trim()) && text.length < 300) || (placeholders.test(text) && text.length < 300))
+		if (blocked.test(parsed.title.trim()) || (placeholders.test(text) && text.length < 300))
 			return { valid: false, reason: 'Login wall, error page or app-only placeholder', score: 0 };
 		const mediaCount = parsed.media?.filter(m => m.candidates.length).length ?? parsed.imageUrls.length;
 		if (parsed.mediaOnly && mediaCount > 0) return { valid: true, score: 100 + mediaCount };

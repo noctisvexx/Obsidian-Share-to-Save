@@ -45,6 +45,10 @@ export class ShareToSaveSettingTab extends PluginSettingTab {
 			new Setting(containerEl).setName(label).addText(text => text.setValue(this.plugin.settings[key]).onChange(async value => {
 				if (validateFolderPath(value) || value.split('/').some(p => p === '..' || p === '.')) return;
 				if (key === 'queueFolder' && (value === this.plugin.settings.outputFolder || value.startsWith(this.plugin.settings.outputFolder + '/'))) return;
+				if (key === 'queueFolder') {
+					if (!await this.plugin.changeQueueFolder(value.trim())) text.setValue(this.plugin.settings.queueFolder);
+					return;
+				}
 				this.plugin.settings[key] = value.trim(); await this.plugin.saveSettings();
 			}));
 		}

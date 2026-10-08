@@ -18,13 +18,16 @@ export class FileWatcher {
 	private isProcessing = false; // 防止并发处理 / Prevent concurrent processing
 	private currentIntervalMs: number;
 	private running = false;
+	private stopped = false;
+	private rerunRequested = false;
+	private controller = new AbortController();
 
 	/** 处理状态变化回调，用于驱动 UI 更新 / Callback for processing state change, drives UI updates */
 	onProcessingChange: ((processing: boolean) => void) | null = null;
 
 	constructor(
 		private queueManager: QueueManager,
-		private downloader: { processUrl(url: string, id: string, folder?: string): Promise<ProcessResult> },
+		private downloader: { processUrl(url: string, id: string, folder?: string, signal?: AbortSignal): Promise<ProcessResult> },
 		private debugLog: (msg: string) => void,
 		private getPollIntervalMs: () => number,  // 动态配置，零耦合 / Dynamic config, zero coupling
 		private t: Translator,
@@ -41,6 +44,8 @@ export class FileWatcher {
 	start(): void {
 		if (this.running) return;
 		this.running = true;
+		this.stopped = false;
+		if (this.controller.signal.aborted) this.controller = new AbortController();
 		this.scheduleNext();
 		this.debugLog(`FileWatcher 已启动，间隔 ${this.currentIntervalMs}ms / FileWatcher started, ${this.currentIntervalMs}ms interval`);
 	}
@@ -50,6 +55,9 @@ export class FileWatcher {
 	 */
 	stop(): void {
 		this.running = false;
+		this.stopped = true;
+		this.controller.abort();
+		this.onProcessingChange = null;
 		if (this.timerId !== null) {
 			window.clearTimeout(this.timerId);
 			this.timerId = null;
@@ -62,7 +70,9 @@ export class FileWatcher {
 	 * Immediately trigger processing (skip wait, still check concurrency)
 	 */
 	async processNow(): Promise<void> {
+		if (this.stopped) return;
 		if (this.isProcessing) {
+			this.rerunRequested = true;
 			this.debugLog('正在处理中，跳过本次触发 / Already processing, skipping');
 			return;
 		}
@@ -92,37 +102,35 @@ export class FileWatcher {
 	 * 单轮检测 / Single check cycle
 	 */
 	private async check(): Promise<void> {
-		if (this.isProcessing) return;
+		if (this.isProcessing || this.stopped) return;
 		if (!this.getEnabled()) return;
 		this.isProcessing = true;
 
 		try {
 			const entries = await this.queueManager.getPendingEntries(this.target, this.target === 'desktop' && this.getFallback());
-			if (entries.length === 0) return;
+			if (entries.length === 0 || this.stopped) return;
 
 			this.isProcessing = true;
 			this.onProcessingChange?.(true);
 			this.debugLog(`发现 ${entries.length} 条待处理 / Found ${entries.length} pending entries`);
 
 			for (const entry of entries) {
-				// delete on start：处理前删除文件，防止重复处理
-				// delete on start: remove file before processing to prevent re-processing
-				if (!await this.queueManager.claim(entry, this.target === 'desktop' && this.getFallback())) continue;
-
+				if (this.stopped || !this.getEnabled()) break;
 				try {
-					const result = await this.downloader.processUrl(entry.url, entry.id, entry.noteFolder);
-					if (result.success) {
-						await this.queueManager.finish(entry, undefined, result.warnings?.join('; '));
-						showNotice(this.t('notice.savedTitle', { title: result.title ?? entry.url }));
-					} else {
-						await this.queueManager.finish(entry, result.error || 'Content extraction failed');
-						showNotice(this.t('notice.downloadFailed', { error: result.error || 'Content extraction failed' }));
-						this.debugLog(`提取失败 / Extraction failed: ${entry.url}`);
+					if (!await this.queueManager.claim(entry, this.target === 'desktop' && this.getFallback())) continue;
+					let result: ProcessResult;
+					try {
+						result = this.stopped ? { success: false, error: 'Clipping cancelled' }
+							: await this.downloader.processUrl(entry.url, entry.id, entry.noteFolder, this.controller.signal);
+					} catch (error) {
+						result = { success: false, error: error instanceof Error ? error.message : String(error) };
 					}
+					await this.queueManager.finish(entry, result.success ? undefined : result.error || 'Content extraction failed', result.warnings?.join('; '));
+					if (!this.stopped) showNotice(result.success ? this.t('notice.savedTitle', { title: result.title ?? entry.url })
+						: this.t('notice.downloadFailed', { error: result.error || 'Content extraction failed' }));
 				} catch (err) {
 					const errMsg = err instanceof Error ? err.message : String(err);
-					this.debugLog(`处理异常 / Processing exception: ${entry.url} - ${errMsg}`);
-					await this.queueManager.finish(entry, errMsg);
+					this.debugLog(`Task retained after claim/confirmation error: ${entry.url} - ${errMsg}`);
 				}
 			}
 		} catch (err) {
@@ -130,6 +138,10 @@ export class FileWatcher {
 		} finally {
 			this.isProcessing = false;
 			this.onProcessingChange?.(false);
+			if (this.rerunRequested && !this.stopped) {
+				this.rerunRequested = false;
+				await this.check();
+			}
 		}
 	}
 }

@@ -16,32 +16,38 @@ import { detectLocale, createTranslator } from './i18n';
 import type { Translator } from './i18n';
 import { extractUrl, extractUrls } from './url-extractor';
 import { QueueManager } from './queue-manager';
-import { Downloader } from './downloader';
+import type { Downloader } from './downloader';
 import { FileWatcher } from './file-watcher';
 import { ShareMenuInjector } from './share-menu-injector';
 import { ImageShareMenuInjector } from './image-share-injector';
 import { InputModal } from './input-modal';
 import { TextSaver } from './text-saver';
-import { showNotice } from './notice-utils';
+import { showNotice, clearMobileNotice } from './notice-utils';
 import { attachmentPath } from './attachment-storage';
 import { TaskModal } from './task-modal';
-import { MobileClipper } from './mobile-clipper';
+import type { ProcessResult } from './types';
+import { checkCancelled } from './cancellation';
+import { randomId } from './random-id';
+import { validateFolderPath } from './text-utils';
 
 export default class ShareToSavePlugin extends Plugin {
 	settings!: ShareToSaveSettings;
 	private t!: Translator;
 	private queueManager!: QueueManager;
-	private downloader!: Downloader;
+	private processor?: Promise<{ processUrl(url: string, id: string, folder?: string, signal?: AbortSignal): Promise<ProcessResult> }>;
 	private fileWatcher!: FileWatcher;
 	private shareMenuInjector!: ShareMenuInjector;
 	private imageShareInjector!: ImageShareMenuInjector;
 	private ribbonIconEl!: HTMLElement;
 	private textSaver!: TextSaver;
 	private isInputModalOpen = false;
+	private unloaded = false;
 
 	async onload(): Promise<void> {
+		this.unloaded = false;
 		// ── 加载设置 / Load settings ──
 		await this.loadSettings();
+		if (this.unloaded) return;
 
 		// ── 初始化 i18n / Initialize i18n ──
 		const locale = detectLocale(getLanguage());
@@ -82,16 +88,14 @@ export default class ShareToSavePlugin extends Plugin {
 
 		// ── 初始化下载器和文件监听器（桌面端）/ Initialize downloader & watcher (desktop) ──
 		{
-			this.downloader = new Downloader(
-				this.app.vault,
-				this.settings,
-				this.t,
-				(filename, sourcePath) => attachmentPath(this.app, this.settings, filename, sourcePath),
-			);
-
 			this.fileWatcher = new FileWatcher(
 				this.queueManager,
-				Platform.isMobile ? new MobileClipper(this.downloader) : this.downloader,
+				{ processUrl: async (url, id, folder, signal) => {
+					checkCancelled(signal);
+					const processor = await this.getProcessor();
+					checkCancelled(signal);
+					return processor.processUrl(url, id, folder, signal);
+				} },
 				(msg) => {
 					console.debug(`Share to Save: ${msg}`);
 				},
@@ -101,7 +105,7 @@ export default class ShareToSavePlugin extends Plugin {
 				() => this.settings.desktopFallback,
 				() => Platform.isDesktop || this.settings.mobileFirst,
 			);
-			this.fileWatcher.start();
+			if (Platform.isDesktop) this.fileWatcher.start();
 			this.fileWatcher.onProcessingChange = (processing) => {
 				this.ribbonIconEl?.classList.toggle('sts-processing', processing);
 			};
@@ -135,9 +139,11 @@ export default class ShareToSavePlugin extends Plugin {
 	}
 
 	onunload(): void {
+		this.unloaded = true;
 		this.shareMenuInjector?.stop();
 		this.imageShareInjector?.stop();
 		this.fileWatcher?.stop();
+		clearMobileNotice();
 		// 清理残留的移动端 toast / Clean up lingering mobile toast
 		activeDocument.querySelector('.sts-mobile-toast')?.remove();
 	}
@@ -228,30 +234,6 @@ export default class ShareToSavePlugin extends Plugin {
 		if (this.isInputModalOpen) return;
 		this.isInputModalOpen = true;
 
-		// 桌面端：检查是否有待处理的队列条目 / Desktop: check for pending queue entries
-		if (Platform.isDesktop) {
-			const pendingEntries = await this.queueManager.getPendingEntries();
-			if (pendingEntries.length > 0) {
-				const urls = pendingEntries.map(e => e.url).join('\n');
-				new InputModal(
-					this.app,
-					this.t,
-					(text, addTimestamp) => this.handleTextSave(text, addTimestamp),
-					async () => {
-						await this.fileWatcher?.processNow();
-					},
-					urls,
-					() => { this.isInputModalOpen = false; },
-					this.settings.timestampEnabled,
-					async (enabled) => {
-						this.settings.timestampEnabled = enabled;
-						await this.saveSettings();
-					},
-				).open();
-				return;
-			}
-		}
-
 		// 无 pending 条目时使用原有流程（提取 URL → 入队 → 处理）
 		// Use existing flow when no pending entries (extract URL → enqueue → process)
 		new InputModal(
@@ -282,13 +264,24 @@ export default class ShareToSavePlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<ShareToSaveSettings>);
+		const stored: unknown = await this.loadData();
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, stored && typeof stored === 'object' ? stored : {});
+		for (const key of ['outputFolder', 'queueFolder', 'attachmentFolder'] as const) {
+			const value: unknown = this.settings[key];
+			if (typeof value !== 'string' || validateFolderPath(value) || value.split('/').some(p => p === '.' || p === '..'))
+				this.settings[key] = DEFAULT_SETTINGS[key];
+		}
+		for (const key of ['mobileFirst', 'desktopFallback'] as const)
+			if (typeof this.settings[key] !== 'boolean') this.settings[key] = DEFAULT_SETTINGS[key];
 		// Device identity stays local; only queue tasks participate in Vault sync.
 		const deviceId: unknown = this.app.loadLocalStorage('share-to-save-device');
-		this.settings.deviceId = typeof deviceId === 'string' && deviceId ? deviceId : crypto.randomUUID();
-		this.app.saveLocalStorage('share-to-save-device', this.settings.deviceId);
+		this.settings.deviceId = typeof deviceId === 'string' && deviceId ? deviceId : randomId();
+		if (deviceId !== this.settings.deviceId) this.app.saveLocalStorage('share-to-save-device', this.settings.deviceId);
 		if (this.settings.queueFolder === this.settings.outputFolder || this.settings.queueFolder.startsWith(this.settings.outputFolder + '/'))
 			this.settings.queueFolder = DEFAULT_SETTINGS.queueFolder;
+		let index = 1;
+		while (this.settings.queueFolder === this.settings.outputFolder || this.settings.queueFolder.startsWith(this.settings.outputFolder + '/'))
+			this.settings.queueFolder = `_ShareToSaveQueue${index++}/queue`;
 	}
 
 	async saveSettings(): Promise<void> {
@@ -306,6 +299,31 @@ export default class ShareToSavePlugin extends Plugin {
 		entry.originDevice = this.settings.deviceId;
 		entry.allowDesktopFallback = this.settings.desktopFallback;
 		entry.noteFolder = this.settings.outputFolder;
-		await this.queueManager.appendEntry(entry);
+		await this.queueManager.enqueue(entry);
+	}
+
+	private async getProcessor(): Promise<{ processUrl(url: string, id: string, folder?: string, signal?: AbortSignal): Promise<ProcessResult> }> {
+		if (!this.processor) this.processor = (async () => {
+			const { Downloader } = await import('./downloader');
+			if (this.unloaded) throw new Error('Clipping cancelled');
+			const pipeline: Downloader = new Downloader(this.app.vault, this.settings, this.t,
+				(filename, sourcePath) => attachmentPath(this.app, this.settings, filename, sourcePath));
+			if (!Platform.isMobile) return pipeline;
+			const { MobileClipper } = await import('./mobile-clipper');
+			return new MobileClipper(pipeline);
+		})().catch((error: unknown) => { this.processor = undefined; throw error; });
+		return this.processor;
+	}
+
+	async changeQueueFolder(value: string): Promise<boolean> {
+		if (value === this.settings.queueFolder) return true;
+		const folder = this.settings.queueFolder;
+		if (await this.app.vault.adapter.exists(folder) && (await this.app.vault.adapter.list(folder)).files.length > 0) {
+			showNotice('已有剪藏任务，暂不能切换任务目录 / Existing tasks must stay accessible');
+			return false;
+		}
+		this.settings.queueFolder = value;
+		await this.saveSettings();
+		return true;
 	}
 }

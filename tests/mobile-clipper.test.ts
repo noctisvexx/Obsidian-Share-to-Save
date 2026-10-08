@@ -34,6 +34,47 @@ function setup() {
 	return { files, vault, pipeline, clipper: new MobileClipper(pipeline) };
 }
 
+it.each([
+	['wechat', 'https://mp.weixin.qq.com/s?id=123', '<div id="js_content"><p>' + 'An informative public article with a readable body. '.repeat(5) + '</p></div>'],
+	['xhs', 'https://www.xiaohongshu.com/explore/123?xsec_token=keep', '<script>window.__INITIAL_STATE__=' + JSON.stringify({ note: { noteDetailMap: { '123': { note: { type: 'normal', title: 'XHS title', desc: 'Do not replace undefined or NaN in article text. '.repeat(3), imageList: [], user: { nickname: 'Author' } } } } } }) + '</script>'],
+	['zhihu', 'https://zhuanlan.zhihu.com/p/123', '<article class="Post-Main"><div class="RichText"><p>' + 'A detailed public Zhihu article with useful examples. '.repeat(5) + '</p></div></article>'],
+	['generic', 'https://example.com/article', '<article><h1>Article</h1><p>' + 'A detailed public web article with useful examples. '.repeat(5) + '</p></article>'],
+])('saves a complete %s fixture on mobile without the desktop processor', async (id, url, body) => {
+	const { clipper, files } = setup();
+	network.mockResolvedValue({ status: 200, text: `<html><head><title>Article</title></head><body>${body}</body></html>`, headers: { 'content-type': 'text/html' } });
+	const result = await clipper.processUrl(url, id);
+	expect(result.success).toBe(true);
+	expect(files.has(`clips/Clip-${id}.md`)).toBe(true);
+	if (id === 'xhs') {
+		expect(files.get(`clips/Clip-${id}.md`)).toContain('undefined or NaN');
+		expect(files.get(`clips/Clip-${id}.md`)).toContain('xsec_token=keep');
+	}
+	expect(network).toHaveBeenCalledOnce();
+});
+
+it('does not save a late HTTP response after mobile cancellation', async () => {
+	const { clipper, files } = setup();
+	let resolve!: (value: unknown) => void;
+	network.mockImplementation(() => new Promise(done => { resolve = done; }));
+	const controller = new AbortController();
+	const pending = clipper.processUrl('https://example.com', 'cancelled', 'clips', controller.signal);
+	await vi.waitFor(() => expect(network).toHaveBeenCalledOnce());
+	controller.abort();
+	expect((await pending).success).toBe(false);
+	resolve({ status: 200, text: '<html><body><article>' + 'Complete body. '.repeat(50) + '</article></body></html>', headers: {} });
+	await new Promise(done => setTimeout(done, 0));
+	expect(files.size).toBe(0);
+});
+
+it('shares one HTTP response between a failed site converter and generic fallback', async () => {
+	const { pipeline, clipper } = setup();
+	vi.spyOn(pipeline, 'processDocToParsed').mockReturnValueOnce({ title: 'Article', author: '', published: '', content: '', imageUrls: [] })
+		.mockReturnValueOnce({ title: 'Article', author: '', published: '', content: 'A useful complete public article with enough text to save safely.', imageUrls: [] });
+	network.mockResolvedValue({ status: 200, text: '<html><body>body</body></html>', headers: {} });
+	expect((await clipper.processUrl('https://mp.weixin.qq.com/s', 'fallback')).success).toBe(true);
+	expect(network).toHaveBeenCalledOnce();
+});
+
 const body = 'This is a public article with a complete body that can be read offline without a login. It contains useful information and enough text to demonstrate reliable conversion.';
 
 it('clips HTML and attachments on mobile using the shared saver without desktop processing', async () => {

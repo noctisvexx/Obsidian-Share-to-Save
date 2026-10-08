@@ -10,6 +10,8 @@ import { Vault, normalizePath, Platform } from 'obsidian';
 import { mobileRequest } from './mobile-http';
 import { buildHeaders } from './http-utils';
 import { sanitizeFilename as sanitizeForFs } from './text-utils';
+import { contentHash as hashContent } from './content-hash';
+import { checkCancelled } from './cancellation';
 
 /** 匹配 Markdown 图片语法 / Match Markdown image syntax */
 const IMG_URL_REGEX = /!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g;
@@ -225,7 +227,9 @@ export class ImageHandler {
 		noteTitle: string,
 		sourceUrl?: string,
 		notePath?: string,
+		signal?: AbortSignal,
 	): Promise<string> {
+		checkCancelled(signal);
 		// 确保附件目录存在 / Ensure attachments directory exists
 		if (!this.getAttachmentPath) await this.ensureAttachmentsDir();
 
@@ -240,7 +244,7 @@ export class ImageHandler {
 		const dedupMap = new Map<string, string>();
 
 		// 下载外链图片并替换为 wikilink / Download external images and replace with wikilinks
-		markdown = await this.processMatches(markdown, IMG_URL_REGEX, noteTitle, dedupMap, sourceUrl, notePath);
+		markdown = await this.processMatches(markdown, IMG_URL_REGEX, noteTitle, dedupMap, sourceUrl, notePath, signal);
 
 		return markdown;
 	}
@@ -283,6 +287,7 @@ export class ImageHandler {
 		dedupMap: Map<string, string>,
 		sourceUrl?: string,
 		notePath?: string,
+		signal?: AbortSignal,
 	): Promise<string> {
 		const matches: Array<{ full: string; alt: string; url: string }> = [];
 		const re = new RegExp(regex.source, 'g');
@@ -301,9 +306,10 @@ export class ImageHandler {
 		// Phase 1: concurrent download (max 3 concurrent, 15s timeout + 1 retry)
 		type DownloadResult = { full: string; url: string; buffer: Uint8Array; contentType: string } | { full: string; url: string; buffer: null };
 		// 回调内所有路径都 catch，不会抛异常，null 情况不会发生 / Callback catches all errors, null case impossible
-		const downloadResults = await this.withConcurrencyLimit(matches, 3, async (m) => {
+		const uniqueMatches = Array.from(new Map(matches.map(m => [m.url, m])).values());
+		const downloadResults = await this.withConcurrencyLimit(uniqueMatches, 3, async (m) => {
 			try {
-				const { buffer, contentType } = await this.downloadWithRetry(m.url, sourceUrl);
+				const { buffer, contentType } = await this.downloadWithRetry(m.url, sourceUrl, signal);
 				return { full: m.full, url: m.url, buffer, contentType };
 			} catch (err) {
 				console.warn(`Share to Save: 附件下载失败 / Attachment download failed: ${m.url}`, err);
@@ -318,6 +324,7 @@ export class ImageHandler {
 		// mid-batch settings change doesn't scatter one note's images across different folders
 		const attachmentsDir = this.getAttachmentsDir();
 		for (const result of downloadResults) {
+			checkCancelled(signal);
 			if (!result.buffer) continue;
 			const { full, url, buffer, contentType } = result;
 
@@ -328,20 +335,26 @@ export class ImageHandler {
 				contentType,
 			});
 
-			const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(buffer));
-			const contentHash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-			filename = `sts-${contentHash}${contentTypeToExt(contentType) || extractExtFromUrl(filename) || '.bin'}`;
+			const contentHash = hashContent(buffer);
+			filename = `sts-${contentHash}${contentTypeToExt(contentType) || extractExtFromUrl(url) || guessFileExtension(url) || '.bin'}`;
+			const replaceMatches = (link: string): void => {
+				for (const m of matches.filter(m => m.url === url)) markdown = markdown.split(m.full).join(link);
+			};
 			const existingWikilink = dedupMap.get(contentHash);
-			if (existingWikilink) { markdown = markdown.replace(full, existingWikilink); continue; }
+			if (existingWikilink) { replaceMatches(existingWikilink); continue; }
 			let localPath = this.getAttachmentPath
 				? await this.getAttachmentPath(filename, notePath || `${this.getOutputFolder()}/${noteTitle}.md`)
 				: `${attachmentsDir}/${filename}`;
 			const originalPath = `${localPath.slice(0, localPath.lastIndexOf('/') + 1)}${filename}`;
-			if (await this.existsWithSameContent(originalPath, buffer)) localPath = originalPath;
+			if (await this.vault.adapter.exists(originalPath)) localPath = originalPath;
 			if (await this.vault.adapter.exists(localPath) && !await this.existsWithSameContent(localPath, buffer)) {
 				let index = 1;
 				const base = localPath;
-				while (await this.vault.adapter.exists(localPath)) localPath = `${base}.${index++}`;
+				const dot = base.lastIndexOf('.');
+				while (await this.vault.adapter.exists(localPath)) {
+					if (await this.existsWithSameContent(localPath, buffer)) break;
+					localPath = dot > base.lastIndexOf('/') ? `${base.slice(0, dot)}-${index++}${base.slice(dot)}` : `${base}-${index++}`;
+				}
 			}
 
 			// 内容哈希去重：同一次批处理中相同内容复用第一个 wikilink
@@ -351,21 +364,25 @@ export class ImageHandler {
 
 			// 去重：已存在且内容相同则跳过 / Dedup: skip if exists with same content
 			if (await this.existsWithSameContent(localPath, buffer)) {
-				markdown = markdown.replace(full, wikilink);
+				replaceMatches(wikilink);
 				continue;
 			}
 
 			// 保存二进制文件 / Save binary file
 			const normalized = normalizePath(localPath);
-			const dir = normalized.substring(0, normalized.lastIndexOf('/'));
+			const slash = normalized.lastIndexOf('/');
+			const dir = slash >= 0 ? normalized.slice(0, slash) : '';
 			const dirExists = await this.vault.adapter.exists(dir);
-			if (!dirExists) {
+			checkCancelled(signal);
+			if (dir && !dirExists) {
 				await this.vault.createFolder(dir);
 			}
-			await this.vault.createBinary(normalized, Uint8Array.from(buffer).buffer);
+			checkCancelled(signal);
+			try { await this.vault.createBinary(normalized, Uint8Array.from(buffer).buffer); }
+			catch (error) { if (!await this.existsWithSameContent(normalized, buffer)) throw error; }
 
 			// 替换原 URL 为 wikilink / Replace original URL with wikilink
-			markdown = markdown.replace(full, wikilink);
+			replaceMatches(wikilink);
 		}
 
 		return markdown;
@@ -436,11 +453,12 @@ export class ImageHandler {
 	 * 带重试的图片下载：15s 超时 + 1 次重试 + 1s 退避
 	 * Image download with retry: 15s timeout + 1 retry + 1s backoff
 	 */
-	private async downloadWithRetry(url: string, sourceUrl?: string): Promise<{ buffer: Uint8Array; contentType: string }> {
+	private async downloadWithRetry(url: string, sourceUrl?: string, signal?: AbortSignal): Promise<{ buffer: Uint8Array; contentType: string }> {
 		for (let attempt = 0; attempt <= 1; attempt++) {
 			try {
+				checkCancelled(signal);
 				if (Platform.isMobile) {
-					const response = await mobileRequest(url, sourceUrl, true);
+					const response = await mobileRequest(url, sourceUrl, true, signal);
 					const contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
 					if (!response.arrayBuffer.byteLength || /(?:text\/html|application\/json)/i.test(contentType))
 						throw new Error('Media response was empty or an error page');
@@ -451,6 +469,7 @@ export class ImageHandler {
 					throw new Error('Media response was empty or an error page');
 				return result;
 			} catch (err) {
+				checkCancelled(signal);
 				if (attempt === 1) throw err;
 				await new Promise(r => window.setTimeout(r, 1_000));
 			}

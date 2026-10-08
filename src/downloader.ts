@@ -14,6 +14,8 @@ import type { Translator } from './i18n';
 import { HeadlessExtractor } from './headless-extractor';
 import { findConverter, genericConverter } from './content-converter';
 import { QualityValidator } from './quality-validator';
+import { checkCancelled } from './cancellation';
+import { noteOwner } from './note-ownership';
 import { MetadataExtractor } from './metadata-extractor';
 
 /** 最大重定向次数 / Maximum redirect hops */
@@ -121,11 +123,13 @@ export class Downloader {
 	 * 处理单个 URL：获取 HTML → 转换管线 → 判断提取成功 → 保存/失败
 	 * Process a single URL: acquire HTML → pipeline → check extraction success → save/fail
 	 */
-	async processUrl(url: string, stsId: string, folder = this.settings.outputFolder): Promise<ProcessResult> {
+	async processUrl(url: string, stsId: string, folder = this.settings.outputFolder, signal?: AbortSignal): Promise<ProcessResult> {
+		checkCancelled(signal);
 		const saved = await this.existingTaskNote(stsId, folder);
 		if (saved) return saved;
 		const cleanUrl = Downloader.stripWeChatTrackingParams(url);
 		const { html, canonicalUrl } = await this.acquireHtml(cleanUrl);
+		checkCancelled(signal);
 		if (!html) {
 			return { success: false, error: '无法获取页面内容 / Failed to fetch page content' };
 		}
@@ -140,7 +144,7 @@ export class Downloader {
 			if (generic && Downloader.isExtractionSuccessful(generic)) parsed = generic;
 		}
 		if (Downloader.isExtractionSuccessful(parsed)) {
-			return this.saveNote(parsed, canonicalUrl, stsId, cleanUrl, folder);
+			return this.saveNote(parsed, canonicalUrl, stsId, cleanUrl, folder, signal);
 		}
 		return { success: false, error: 'Content extraction was incomplete' };
 	}
@@ -214,7 +218,8 @@ export class Downloader {
 	 * 统一下游保存逻辑：sanitize → frontmatter → images → vault
 	 * Unified downstream save: sanitize → frontmatter → images → vault
 	 */
-	async saveNote(parsed: ParsedContent, canonicalUrl: string, stsId: string, inputUrl: string, folder = this.settings.outputFolder): Promise<ProcessResult> {
+	async saveNote(parsed: ParsedContent, canonicalUrl: string, stsId: string, inputUrl: string, folder = this.settings.outputFolder, signal?: AbortSignal): Promise<ProcessResult> {
+		checkCancelled(signal);
 		const saved = await this.existingTaskNote(stsId, folder);
 		if (saved) return saved;
 		const safeTitle = Downloader.sanitizeNoteTitle(parsed.title || 'Untitled');
@@ -223,14 +228,14 @@ export class Downloader {
 		let mdContent = frontmatter + '\n' + parsed.content.trimStart();
 
 		const finalPath = this.taskNotePath(stsId, folder);
-		mdContent = await this.imageHandler.processContent(mdContent, safeTitle, canonicalUrl, finalPath);
+		mdContent = await this.imageHandler.processContent(mdContent, safeTitle, canonicalUrl, finalPath, signal);
 		const warnings = Downloader.extractImageUrls(mdContent).map(url => `Attachment not downloaded: ${url}`);
 		for (const media of parsed.media || []) {
 			if (media.candidates.some(url => parsed.imageUrls.includes(url))) continue;
 			let saved = false;
 			for (const url of media.candidates) {
 				if (!/^https?:\/\//.test(url)) continue;
-				const snippet = await this.imageHandler.processContent(`![](${url})`, safeTitle, media.referer || canonicalUrl, finalPath);
+				const snippet = await this.imageHandler.processContent(`![](${url})`, safeTitle, media.referer || canonicalUrl, finalPath, signal);
 				if (snippet.startsWith('![[')) { mdContent += '\n\n' + snippet; saved = true; break; }
 			}
 			if (!saved) {
@@ -240,11 +245,13 @@ export class Downloader {
 		}
 
 		const dirExists = await this.vault.adapter.exists(folder);
+		checkCancelled(signal);
 		if (!dirExists) {
 			await this.vault.createFolder(folder);
 		}
 
 		// 处理同名文件：递增编号 / Handle duplicate filenames: increment counter
+		checkCancelled(signal);
 		try { await this.vault.create(finalPath, mdContent); }
 		catch (error) {
 			const existing = await this.existingTaskNote(stsId, folder);
@@ -266,7 +273,7 @@ export class Downloader {
 		const path = this.taskNotePath(id, folder);
 		if (!await this.vault.adapter.exists(path)) return null;
 		const content = await this.vault.adapter.read(path);
-		if (!content.split('\n---', 1)[0]?.includes(`sts_id: "${id}"`)) throw new Error('Existing note path belongs to another note');
+		if (noteOwner(content) !== id) throw new Error('Existing note path belongs to another note');
 		return { success: true, title: path.split('/').pop() };
 	}
 

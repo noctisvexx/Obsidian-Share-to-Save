@@ -5,6 +5,13 @@
 
 import { Notice, Platform } from 'obsidian';
 
+let disposeMobileNotice: (() => void) | undefined;
+
+export function clearMobileNotice(): void {
+	disposeMobileNotice?.();
+	disposeMobileNotice = undefined;
+}
+
 /** 通知句柄，支持动态更新消息和手动隐藏 */
 export interface ShowNotice {
 	/** 更新已显示通知的消息文本 / Update the displayed message text */
@@ -30,6 +37,7 @@ export function showNotice(message: string, duration = 2500): ShowNotice {
 	}
 
 	// 移除已有 toast，避免堆叠 / Remove existing toast to prevent stacking
+	clearMobileNotice();
 	const existing = activeDocument.querySelector('.sts-mobile-toast');
 	if (existing) existing.remove();
 
@@ -38,6 +46,10 @@ export function showNotice(message: string, duration = 2500): ShowNotice {
 	toast.textContent = message;
 
 	let hideTimeout: number | null = null;
+	disposeMobileNotice = () => {
+		if (hideTimeout !== null) window.clearTimeout(hideTimeout);
+		toast.remove();
+	};
 
 	const startHide = () => {
 		if (toast.parentElement) {

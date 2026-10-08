@@ -6,7 +6,7 @@ export async function attachmentPath(app: App, settings: ShareToSaveSettings, fi
 	if (!filename || filename === '.' || filename === '..' || /[\\/:|]/.test(filename) || filename.includes('[') || filename.includes(']'))
 		throw new Error('Invalid attachment filename');
 	if (settings.attachmentPolicy === 'obsidian')
-		return app.fileManager.getAvailablePathForAttachment(filename, sourcePath);
+		return normalizePath(await app.fileManager.getAvailablePathForAttachment(filename, sourcePath));
 	const folder = normalizePath(settings.attachmentFolder);
 	if (!folder || /[\\:]/.test(settings.attachmentFolder) || folder.split('/').some(p => p === '..' || p === '.') || folder.startsWith('/'))
 		throw new Error('Invalid attachment folder');

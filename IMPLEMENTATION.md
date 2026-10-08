@@ -98,3 +98,12 @@ Final stage 2 verification: 35 automated tests passed across six files;
 `npm run lint` and whitespace checks passed. The settings copy now describes
 mobile-first clipping and the obsolete desktop-only workflow graphic is removed.
 Android device tests and live-site tests have not been performed.
+
+## Acceptance follow-up
+
+The 2026-10-08 acceptance pass supersedes the earlier validation count and queue
+switching description. See `ACCEPTANCE_REPORT.md`: 71 tests, build and lint pass;
+no Android device was connected. Mobile idle polling is removed, processors are
+lazy, URL/folder task IDs are stable and completed receipts survive stale task
+status sync. Nonempty queue-directory changes are now rejected safely. Stage 3
+remains paused pending user confirmation.

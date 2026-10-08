@@ -8,6 +8,8 @@
 
 import { Vault, TFile, normalizePath } from 'obsidian';
 import type { ShareToSaveSettings } from './types';
+import { noteOwner } from './note-ownership';
+import { validateFolderPath } from './text-utils';
 
 /** 固定输出文件名 / Fixed output filename */
 const NOTE_NAME = 'Sts-memos.md';
@@ -32,6 +34,8 @@ export class TextSaver {
 	 * @param addTimestamp 是否添加时间戳 / Whether to add a timestamp heading
 	 */
 	async save(text: string, addTimestamp: boolean): Promise<void> {
+		if (validateFolderPath(this.settings.outputFolder) || this.settings.outputFolder.split('/').some(p => p === '.' || p === '..'))
+			throw new Error('Invalid memo folder');
 		const filePath = normalizePath(`${this.settings.outputFolder}/${NOTE_NAME}`);
 
 		// 时间戳 YYYY/MM/DD HH:mm:ss / Timestamp
@@ -54,6 +58,8 @@ export class TextSaver {
 		const newBlock = prefix ? `\n${prefix}\n${text}\n` : `\n${text}\n`;
 
 		const fileExists = await this.vault.adapter.exists(filePath);
+		if (fileExists && noteOwner(await this.vault.adapter.read(filePath)) !== 'text')
+			throw new Error('Sts-memos.md belongs to another note; choose a different save folder');
 
 		if (!fileExists) {
 			// 确保目录存在 / Ensure directory exists
@@ -71,6 +77,7 @@ export class TextSaver {
 				throw new Error(`${NOTE_NAME} is not a file`);
 			}
 			await this.vault.process(file, (data) => {
+				if (noteOwner(data) !== 'text') throw new Error('Memo ownership changed');
 				// 找到 frontmatter 结束位置（第二个 ---）/ Find frontmatter end (second ---)
 				const fmMatch = /^---[\s\S]*?^---/m.exec(data);
 				if (fmMatch) {

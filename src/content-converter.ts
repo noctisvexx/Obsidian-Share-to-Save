@@ -627,7 +627,8 @@ class XiaohongshuConverter implements ContentConverter {
 				jsonStr = jsonStr.slice(0, lastBrace + 1);
 			}
 			// 替换 JSON 中非法的 JS 字面量 / Replace illegal JS literals in JSON
-			const cleaned = jsonStr.replace(/undefined/g, 'null').replace(/\bNaN\b/g, 'null');
+			const cleaned = jsonStr.replace(/("(?:\\.|[^"\\])*")|\b(?:undefined|NaN)\b/g,
+				(token, quoted: string | undefined) => quoted ? token : 'null');
 			return JSON.parse(cleaned) as XhsInitialState;
 		} catch {
 			return null;
