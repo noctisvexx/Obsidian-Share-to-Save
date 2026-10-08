@@ -29,6 +29,10 @@ export function find(value: unknown, predicate: (data: Data) => boolean): Data |
 	const pending = [value]; let count = 0;
 	while (pending.length && count++ < 12000) {
 		const next = pending.pop();
+		if (typeof next === 'string' && next.length < 2000000 && (next.trim().startsWith('{') || next.trim().startsWith('['))) {
+			try { pending.push(JSON.parse(next) as unknown); } catch { /* Only nested JSON, not executable expressions. */ }
+			continue;
+		}
 		if (!next || typeof next !== 'object') continue;
 		if (!Array.isArray(next) && predicate(object(next))) return object(next);
 		pending.push(...(Array.isArray(next) ? list(next) : Object.values(object(next))));

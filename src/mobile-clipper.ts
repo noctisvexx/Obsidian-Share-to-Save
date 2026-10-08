@@ -8,6 +8,7 @@ import { checkCancelled } from './cancellation';
 import { BilibiliResolver } from './platforms/bilibili';
 import { DouyinResolver } from './platforms/douyin';
 import { TwitterResolver } from './platforms/twitter';
+import { InstagramResolver } from './platforms/instagram';
 import { publicPage } from './platforms/shared';
 
 export class MobileClipper {
@@ -35,7 +36,7 @@ export class MobileClipper {
 				const contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
 				if (/(?:application\/json|image\/|video\/)/i.test(contentType)) throw new Error('Response is not an HTML page');
 				const canonicalUrl = UrlNormalizer.canonical(response.text, response.url);
-				if (generic && /(?:^|\.)(?:bilibili\.com|b23\.tv|douyin\.com|iesdouyin\.com|x\.com|twitter\.com|t\.co)$/.test(new URL(url).hostname)) {
+				if (generic && /(?:^|\.)(?:bilibili\.com|b23\.tv|douyin\.com|iesdouyin\.com|x\.com|twitter\.com|t\.co|instagram\.com|instagr\.am)$/.test(new URL(url).hostname)) {
 					publicPage(response);
 					const doc = new DOMParser().parseFromString(response.text, 'text/html');
 					if (!doc.querySelector('article, .opus-content')) throw new Error('No verified public platform body for generic fallback');
@@ -54,8 +55,11 @@ export class MobileClipper {
 				return { ...parsed, originalUrl: url, canonicalUrl: resolvedUrl, platform: new URL(resolvedUrl).hostname };
 			},
 		});
-		const request = (url: string, referer?: string) => mobileRequest(url, referer, false, signal);
-		return new ResolverRegistry([new BilibiliResolver(request), new DouyinResolver(request), new TwitterResolver(request), createResolver(false)], createResolver(true));
+		const request = (url: string, referer?: string) => {
+			if (!pages.has(url)) pages.set(url, mobileRequest(url, referer, false, signal));
+			return pages.get(url)!;
+		};
+		return new ResolverRegistry([new BilibiliResolver(request), new DouyinResolver(request), new TwitterResolver(request), new InstagramResolver(request), createResolver(false)], createResolver(true));
 	}
 	async processUrl(url: string, id: string, folder?: string, signal?: AbortSignal): Promise<ProcessResult> {
 		try {

@@ -54,6 +54,9 @@ export function scriptObjects(html: string, wantedKey: string, wantedValue: stri
 				return name && assignments.has(name) ? read(assignments.get(name), depth + 1, seen) : undefined;
 			};
 			for (const node of nodes) {
+				if (node.type === 'Literal' && typeof node.value === 'string' && node.value.includes(wantedValue) && (node.value.trim().startsWith('{') || node.value.trim().startsWith('['))) {
+					try { results.push(object(JSON.parse(node.value) as unknown)); } catch { /* Only a literal JSON string. */ }
+				}
 				if (node.type !== 'ObjectExpression') continue;
 				const match = list(node.properties).some(value => {
 					const prop = object(value), key = object(prop.key), val = object(prop.value);

@@ -76,3 +76,29 @@ content when the page does not expose that distinction; retest long posts on a
 device. X Articles content-state parsing is not implemented in this pass.
 Changed: X/static-script-data modules, registry, package.json/lock (Acorn runtime
 dependency), `tests/twitter.test.ts`, mobile entry and this report.
+
+## Instagram
+
+Implemented: p/reel/tv, username-prefixed URLs, instagr.am aliases and share URLs
+that expose a public post identity. Ordinary public page JSON/Polaris structures
+first, public embed/captioned page second, then verified token-free public oEmbed
+identity diagnostics. The embed's literal JSON strings and nested contextJSON
+are decoded statically. Shortcode/code, owner, caption, optional timestamp,
+sidecar/carousel_media and image_versions2 candidates use the shared saver.
+Videos save posters, not video_versions streams. Incomplete galleries fail.
+
+The user's DdrPNX1jVEz main page had metadata but no complete carousel. Its public
+embed exposed GraphSidecar children inside encoded contextJSON. An independent
+opt-in live anonymous resolver test extracted caption, owner and multiple images.
+Graph v25.0 token-free oEmbed responded during the probe, but its skeleton HTML
+was not used as proof of complete clipping. Private media endpoints and signed
+Polaris GraphQL requests are not called. Publicly embedded Polaris JSON is parsed
+only when already included in a readable page. Availability can change.
+
+Acceptance: 133 tests passed, three opt-in live tests skipped; TypeScript/build/
+lint passed. Twelve Instagram cases include one separately passing live test.
+Live probes are Node parsing only: no Android, Vault sync or real image download
+validation. Missing timestamps remain empty, not guessed. Expiring CDN URLs can
+fail downloads and leave remote links with existing attachment warnings.
+Changed: `src/platforms/instagram.ts`, nested literal JSON helpers, mobile
+registry, `tests/instagram.test.ts` and this report.
