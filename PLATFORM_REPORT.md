@@ -50,3 +50,29 @@ with illustrative values; these are NOT successful live page captures. The real
 verification-shell marker was checked separately. Android has not been tested.
 Changed: `src/platforms/douyin.ts`, platform access-wall helpers, registry entry,
 `tests/douyin.test.ts` and this report.
+
+## X / Twitter
+
+Implemented: status/photo/video URLs on X and Twitter, public t.co redirects,
+matching public page JSON or serialized SSR, unauthenticated syndication, guarded
+HTML metadata and public oEmbed fallback. Acorn parses syntax; the literal-only
+reader never evaluates calls, functions/getters or arbitrary operators. No
+GraphQL authentication, guest bearer token or manufactured syndication token.
+Public note_tweet long text, quoted post text/images and video posters are parsed
+when exposed. Truncated known long posts fail rather than saving a preview.
+
+Observed: the user's Allen0125/2107449641403039962 page exposed real caption and
+one image and passed an opt-in anonymous live resolver test. The Randgai_artz
+sample exposed explicit age-restriction metadata; it is deliberately rejected,
+without attempting another endpoint. Syndication was empty in an initial probe
+and later had TLS failure; it is not a guaranteed source. Public oEmbed responded
+but cannot alone guarantee full media or long-post content.
+
+Acceptance: 122 automated tests passed (two opt-in tests skipped); TypeScript,
+build and lint passed. Ten X cases include one separately passing live resolver
+test. Node live parsing is NOT Android requestUrl, Vault or media-download testing.
+Metadata fallback may provide a public preview rather than full long/quoted
+content when the page does not expose that distinction; retest long posts on a
+device. X Articles content-state parsing is not implemented in this pass.
+Changed: X/static-script-data modules, registry, package.json/lock (Acorn runtime
+dependency), `tests/twitter.test.ts`, mobile entry and this report.

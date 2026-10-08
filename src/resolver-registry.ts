@@ -1,5 +1,6 @@
 import type { ParsedContent } from './types';
 import { QualityValidator } from './quality-validator';
+import { AccessError } from './platforms/shared';
 
 export interface PlatformResolver {
 	readonly name: string;
@@ -17,7 +18,7 @@ export class ResolverRegistry {
 				const quality = QualityValidator.validate(content);
 				if (quality.valid) return content;
 				errors.push(`${resolver.name}: ${quality.reason}`);
-			} catch (error) { errors.push(`${resolver.name}: ${String(error)}`); }
+			} catch (error) { if (error instanceof AccessError) throw error; errors.push(`${resolver.name}: ${String(error)}`); }
 		}
 		throw new Error(errors.join('; ') || 'No usable content');
 	}

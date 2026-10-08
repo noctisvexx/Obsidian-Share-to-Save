@@ -35,6 +35,7 @@
 		"vitest": "^4.1.8"
 	},
 	"dependencies": {
+		"acorn": "8.16.0",
 		"@noble/hashes": "2.4.0",
 		"@joplin/turndown-plugin-gfm": "^1.0.67",
 		"defuddle": "github:chenxiccc/defuddle#share-to-save",
