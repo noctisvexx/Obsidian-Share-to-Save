@@ -191,3 +191,26 @@ compare the section against its captions; verify no timestamps or duplicate
 adjacent lines. Test a p=2 link with different captions, and this user's current
 link/offline subtitle failure to confirm the base video still saves. Real
 Android requestUrl subtitle access and processing speed remain unverified.
+
+## Instagram Android Failure Follow-up
+
+The user reported missing matching media/contextJSON on DdrPNX1jVEz. Reproduced
+with production Chrome User-Agent and Chinese Accept-Language: both main and
+embed/captioned pages returned HTTP 200 app shells without carousel data. The
+same public embed with default request headers exposed contextJSON/GraphSidecar.
+The earlier Node probe did not model production headers and missed this issue.
+
+Only public Instagram /p/.../embed requests now omit the plugin's explicit
+browser User-Agent and Accept-Language, allowing native request defaults. Normal
+Instagram pages, other platforms and binary downloads keep existing behavior.
+No credentials, alternate signed endpoints or reduced quality checks were added.
+Native Android defaults may differ from Node defaults; this is a targeted fix,
+not a claim of successful Android verification.
+
+Acceptance: 154 automated tests passed, 4 skipped; TypeScript/build and lint
+passed. A separate online Instagram resolver test with the revised production
+header policy passed. New HTTP tests verify the embed-only header scope and
+unchanged Xiaohongshu mobile User-Agent. Failed tasks remain retryable.
+Install the updated package, restart Obsidian, then retry the existing failed
+task. Compare carousel count/caption and attachment downloads. If it still
+fails, provide the new retained error; no Android success is claimed yet.

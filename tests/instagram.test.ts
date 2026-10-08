@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { DOMParser } from 'linkedom';
 import { InstagramResolver } from '../src/platforms/instagram';
 import type { FetchPage } from '../src/platforms/shared';
+import { buildHeaders } from '../src/http-utils';
 beforeEach(() => vi.stubGlobal('DOMParser', DOMParser));
 const code = 'DdrPNX1jVEz';
 const url = `https://www.instagram.com/p/${code}/`;
@@ -52,7 +53,11 @@ it.each(['login', 'challenge'])('does not try embed or oEmbed after an explicit 
 it.skipIf(process.env.STS_LIVE_PLATFORM !== '1')('checks the live user Instagram carousel without credentials', async () => {
 	const request: FetchPage = async target => {
 		// eslint-disable-next-line no-restricted-globals -- Opt-in Node acceptance probe, not production networking.
-		const response = await fetch(target, { signal: AbortSignal.timeout(20000) });
+		const headers = buildHeaders();
+		if (new URL(target).pathname.includes('/embed/')) {
+			delete headers['User-Agent']; delete headers['Accept-Language'];
+		}
+		const response = await fetch(target, { headers, signal: AbortSignal.timeout(20000) });
 		if (!response.ok) throw Error('HTTP ' + response.status);
 		return { text: await response.text(), url: response.url, headers: {} };
 	};

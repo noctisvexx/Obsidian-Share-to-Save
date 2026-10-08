@@ -15,6 +15,12 @@ export async function mobileRequest(url: string, referer?: string, binary = fals
 				for (let hop = 0; hop <= 5; hop++) {
 					checkCancelled(signal);
 					const headers = buildHeaders(referer);
+					// Public Instagram embeds can serve an empty app shell for browser headers.
+					const target = new URL(current);
+					if (!binary && /(?:^|\.)instagram\.com$/.test(target.hostname) && /^\/p\/[\w-]+\/embed(?:\/|$)/.test(target.pathname)) {
+						delete headers['User-Agent'];
+						delete headers['Accept-Language'];
+					}
 					if (!binary && /(?:^|\.)(?:xiaohongshu\.com|xhslink\.(?:com|cn))$/.test(new URL(current).hostname))
 						headers['User-Agent'] = XHS_MOBILE_UA;
 					if (referer) headers.Referer = referer;

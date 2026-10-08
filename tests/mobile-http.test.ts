@@ -3,7 +3,7 @@ import type { Mock } from 'vitest';
 import { requestUrl } from 'obsidian';
 import { mobileRequest } from '../src/mobile-http';
 vi.mock('obsidian', async importOriginal => ({ ...await importOriginal<object>(), requestUrl: vi.fn() }));
-const network = requestUrl as unknown as Mock<(options: {url: string}) => Promise<unknown>>;
+const network = requestUrl as unknown as Mock<(options: {url: string; headers: Record<string, string>}) => Promise<unknown>>;
 beforeEach(() => { network.mockReset(); });
 afterEach(() => vi.useRealTimers());
 
@@ -26,4 +26,16 @@ it('times out a stalled mobile request', async () => {
 	const assertion = expect(mobileRequest('https://example.com')).rejects.toThrow('Network timeout');
 	await vi.advanceTimersByTimeAsync(30001);
 	await assertion;
+});
+
+it('uses native request headers for public Instagram embeds only', async () => {
+	network.mockResolvedValue({ status: 200, text: 'body', headers: {} });
+	await mobileRequest('https://www.instagram.com/p/DdrPNX1jVEz/embed/captioned/');
+	const options = network.mock.calls[0]![0] as { headers: Record<string, string> };
+	expect(options.headers['User-Agent']).toBeUndefined();
+	expect(options.headers['Accept-Language']).toBeUndefined();
+	await mobileRequest('https://www.instagram.com/p/DdrPNX1jVEz/');
+	expect((network.mock.calls[1]![0] as { headers: Record<string, string> }).headers['User-Agent']).toBeDefined();
+	await mobileRequest('https://www.xiaohongshu.com/explore/example');
+	expect((network.mock.calls[2]![0] as { headers: Record<string, string> }).headers['User-Agent']).toContain('Android');
 });
