@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { createTranslator } from '../src/i18n';
 
-it('uses noctis branding without changing the existing installation identity', () => {
+it('uses noctis branding with an independent installation identity', () => {
 	const manifest = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')) as Record<string, unknown>;
 	expect(manifest.name).toBe('noctis'); expect(manifest.author).toBe('noctis');
-	expect(manifest.id).toBe('share-to-save'); expect(manifest.isDesktopOnly).toBe(false);
+	expect(manifest.id).toBe('share-to-clipper'); expect(manifest.isDesktopOnly).toBe(false);
 	for (const locale of ['zh', 'en'] as const) {
 		const t = createTranslator(locale);
 		expect(t('ribbon.tooltip')).toContain('noctis'); expect(t('settings.title')).toContain('noctis');

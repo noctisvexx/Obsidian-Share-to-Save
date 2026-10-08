@@ -3,7 +3,7 @@
 日期：2026-10-08（Asia/Shanghai）。分支：`codex/mobile-first-clipper`。
 交付性质：待最终真机验收的候选版，非无条件稳定发布声明。
 没有修改或合并 main。用户确认后，插件显示名称及当前作者改为 noctis。
-ID share-to-save 与版本 5.4.4 保留以兼容现有安装。LICENSE 保留
+用户授权测试 Vault 使用独立 ID share-to-clipper，版本暂为 5.4.4。LICENSE 保留
 Copyright (c) 2025 chenxiccc，并增加 Copyright (c) 2026 noctis (modifications)。
 
 ## 完成范围
@@ -103,7 +103,7 @@ omit=dev：5 个包告警（1 low、2 moderate、2 high）。这是包数量，�
    留下不再引用的文件。为数据安全不自动删除这些附件。
 5. 附件警告不把整篇文章判失败；用户需检查图片是否离线，CDN 地址可能过期。
 6. 标题/ID 改动不迁移或重命名已有笔记；旧 Clip-ID 命名保持可识别。
-7. 本候选版仍标记 5.4.4，保留安装 ID；更名没有迁移用户数据。正式发布时需要用户
+7. 本候选版仍标记 5.4.4，安装 ID 改为 share-to-clipper，没有迁移用户数据。正式发布时需要用户
    决定版本号和发布方式，不能把旧同版本社区包视为本分支构建。
 
 ## vivo Android 最终验收清单
@@ -132,7 +132,7 @@ omit=dev：5 个包告警（1 low、2 moderate、2 high）。这是包数量，�
 
 安装包：`tmp/noctis.zip`，包含 main.js、manifest.json、
 styles.css 及许可说明。SHA-256 随交付产物提供；仓库根目录也有生产构建文件。
-安装包 SHA-256：`D2E2EBFE6CF94F9137782D537DCE12CACDBDF16A9FAF53FB82E27BBC2F84DA5C`。
+安装包 SHA-256：`2C1F10ECCFAF555DCACD8808357C457DD438C2B7ADFF4C60A71CFE61A1C621DA`。
 本轮修改：README.md、THIRDPARTY.md、THIRD_PARTY_NOTICES.txt、FINAL_REPORT.md、
 src/main.ts、src/downloader.ts、src/mobile-http.ts、src/platforms/shared.ts、
 tests/mobile-http.test.ts、tests/public-page.test.ts、tests/twitter.test.ts。
@@ -141,8 +141,9 @@ tests/mobile-http.test.ts、tests/public-page.test.ts、tests/twitter.test.ts。
 需用户完成剩余重点 vivo 验收，明确生产依赖风险的修补或接受决定，并确认版本
 及发布安排。按用户要求更名并标明 fork 归属；没有发布或合并 main。
 
-更名补充：manifest/package 作者和显示名称、界面设置/按钮名称已更新；保留
-share-to-save ID、旧目录、URI、任务/YAML 标识以兼容既有安装和重试。README
+更名补充：manifest/package 作者和显示名称、界面设置/按钮名称已更新；使用
+share-to-clipper ID、独立设备标识及 obsidian://share-to-clipper URI。任务/YAML
+标识和默认内容目录保持不变。旧设置不自动复制，安装时需停用旧插件。README
 明确区分 noctis 维护版本与 chenxiccc 上游版本；MIT 原声明和第三方许可不移除。
 新增 tests/branding.test.ts 验证品牌、安装 ID 及两方版权声明。
 用户确认原 Instagram 分享链接已通过 Android 真机测试；不推定其他帖子都可用。

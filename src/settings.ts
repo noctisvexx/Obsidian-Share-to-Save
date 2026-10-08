@@ -167,12 +167,12 @@ export class ShareToSaveSettingTab extends PluginSettingTab {
 		iosDesc.setText(this.t('settings.shortcut.ios.desc'));
 		const iosRow = iosSection.createDiv({ cls: 'sts-shortcut-row' });
 		iosRow.createSpan({ cls: 'sts-shortcut-label', text: this.t('settings.shortcut.ios.uriLabel') });
-		iosRow.createSpan({ cls: 'sts-shortcut-value', text: 'obsidian://share-to-save' });
+		iosRow.createSpan({ cls: 'sts-shortcut-value', text: 'obsidian://share-to-clipper' });
 		const iosCopyBtn = iosRow.createSpan({ cls: 'sts-shortcut-copy-btn' });
 		setIcon(iosCopyBtn, 'clipboard-copy');
 		iosCopyBtn.setAttribute('aria-label', this.t('settings.shortcut.copy'));
 		iosCopyBtn.addEventListener('click', () => {
-			void navigator.clipboard.writeText('obsidian://share-to-save').then(() => {
+			void navigator.clipboard.writeText('obsidian://share-to-clipper').then(() => {
 				showNotice(this.t('settings.shortcut.copied'));
 			});
 		});
@@ -199,7 +199,7 @@ export class ShareToSaveSettingTab extends PluginSettingTab {
 			{ labelKey: 'settings.shortcut.package', value: 'md.obsidian' },
 			// eslint-disable-next-line obsidianmd/hardcoded-config-path -- Android activity identifier, not a Vault path.
 			{ labelKey: 'settings.shortcut.class', value: 'md.obsidian.MainActivity' },
-			{ labelKey: 'settings.shortcut.data', value: 'obsidian://share-to-save' },
+			{ labelKey: 'settings.shortcut.data', value: 'obsidian://share-to-clipper' },
 		];
 		for (const field of shortcutFields) {
 			const row = androidSection.createDiv({ cls: 'sts-shortcut-row' });

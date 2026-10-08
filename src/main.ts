@@ -126,9 +126,8 @@ export default class ShareToSavePlugin extends Plugin {
 		});
 
 		// ── 自定义 URI 协议处理 / Custom URI protocol handler ──
-		// 支持 obsidian://share-to-save 快速唤起 URL 输入框（Android 桌面快捷方式等）
-		// Supports obsidian://share-to-save to quickly open the URL input modal (Android shortcuts, etc.)
-		this.registerObsidianProtocolHandler('share-to-save', async (params) => {
+		// Supports the independent clipper URI for shortcuts and explicit URL input.
+		this.registerObsidianProtocolHandler('share-to-clipper', async (params) => {
 			if (params.url || params.text) await this.handleUrlInput(params.url || params.text || '');
 			else await this.openInputModal();
 		});
@@ -274,9 +273,9 @@ export default class ShareToSavePlugin extends Plugin {
 		for (const key of ['mobileFirst', 'desktopFallback'] as const)
 			if (typeof this.settings[key] !== 'boolean') this.settings[key] = DEFAULT_SETTINGS[key];
 		// Device identity stays local; only queue tasks participate in Vault sync.
-		const deviceId: unknown = this.app.loadLocalStorage('share-to-save-device');
+		const deviceId: unknown = this.app.loadLocalStorage('share-to-clipper-device');
 		this.settings.deviceId = typeof deviceId === 'string' && deviceId ? deviceId : randomId();
-		if (deviceId !== this.settings.deviceId) this.app.saveLocalStorage('share-to-save-device', this.settings.deviceId);
+		if (deviceId !== this.settings.deviceId) this.app.saveLocalStorage('share-to-clipper-device', this.settings.deviceId);
 		if (this.settings.queueFolder === this.settings.outputFolder || this.settings.queueFolder.startsWith(this.settings.outputFolder + '/'))
 			this.settings.queueFolder = DEFAULT_SETTINGS.queueFolder;
 		let index = 1;
