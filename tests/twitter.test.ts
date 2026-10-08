@@ -46,7 +46,7 @@ it('uses the observed public metadata layout if SSR and syndication are unavaila
 it('rejects the actual age-restriction metadata without requesting alternative endpoints', async () => {
 	const html = '<html><head><meta name="rating" content="adult"><meta property="og:description" content="Age-restricted adult content. To view this media, you’ll need to log in to X."></head><body></body></html>';
 	const fetch = vi.fn<FetchPage>().mockResolvedValue({ text: html, url: 'https://x.com/Randgai_artz/status/2100577596954001735', headers: {} });
-	await expect(new TwitterResolver(fetch).resolve('https://x.com/Randgai_artz/status/2100577596954001735')).rejects.toThrow('age restriction');
+	await expect(new TwitterResolver(fetch).resolve('https://x.com/Randgai_artz/status/2100577596954001735')).rejects.toThrow('Age-restricted');
 	expect(fetch).toHaveBeenCalledOnce();
 });
 it('does not accept an empty post, unrelated recommendations or an HTTP-200 login page', async () => {

@@ -1,177 +1,104 @@
-[中文](#中文) | [English](#share-to-save)
-
 # Share to Save
 
-![User Flow](assets/UserFlow.png)
-
-An Obsidian plugin that automatically downloads web pages as Markdown notes, with quick text note capture.
-
-**1. Save web pages:** Share / Add links from mobile → Auto-download on desktop → Save to your vault
-
-**2. Save text:** Type text in the plugin input and save
-
-**3. Quick capture:** Home screen shortcut for one-tap access to the input, see [Add to Home Screen](#add-to-home-screen) below
-
-## Typical Usage
-
-- **General Web Pages** — Any standard article page (news, blogs, documentation) works out of the box via the built-in defuddle fallback.
-- **WeChat Articles** — Share an article from WeChat Official Accounts to Obsidian, and it will be saved with full text, images, and metadata intact.
-- **Xiaohongshu (RED) Posts** — Copy a RED post link, add the link in the plugin, and both the text content and all images will be extracted and saved.
-- **Quick Notes** — Home screen shortcut for one-tap access to the input, quickly capture fleeting thoughts or clipboard text
-
-## Workflow
-
-### 📱 Share or Add URL on Mobile → 💻 Auto-Download on Desktop
-
-#### Web Page Saving
-
-1. Share to Obsidian via the share button on your mobile device
-2. Select "Save to Share-to-Save" in the share menu
-3. Or click the plugin ribbon button, then paste a URL
-4. URL is written to the queue file under the Share-to-Save folder
-5. Sync to your desktop (see [Sync Methods](#sync-methods) below)
-6. The desktop plugin detects the entry and automatically fetches the full web content, saving it as a `.md` note
-7. On desktop, you can also click the ribbon button to directly enter a URL
-
-#### Text Saving
-
-Desktop ribbon button ☁️ or mobile menu ☰ → ☁️ input text → click "Save Text" button
-
-## Installation
-
-- **iOS Obsidian ≥ 1.13.0** — Obsidian 1.13 introduced a new share sheet menu. Install the plugin on **desktop only** (mobile not required). When sharing, select `Share-to-Save` as the target folder in the new share sheet menu.
-- **iOS < 1.13.0 / Android** — Install the plugin on **both mobile and desktop**. Share via the in-app share menu (the plugin injects a "Save to Share-to-Save" button).
-
-## Sync Methods
-
-The plugin relies on file sync to transfer the queue file from mobile to desktop. We recommend one of the following:
-
-| Method                                                                         | Cost | Speed            | Setup                                |
-| ------------------------------------------------------------------------------ | ---- | ---------------- | ------------------------------------ |
-| **[Fast Note Sync](https://github.com/haierkeys/obsidian-fast-note-sync/)** | Free | Instant          | Easy — another Obsidian plugin      |
-| iCloud                                                                         | Free | ~1-10s           | Built-in on Apple devices            |
-| Syncthing                                                                      | Free | ~1-5s            | Cross-platform, self-hosted          |
-| Git                                                                            | Free | Manual push/pull | Versioned, but requires manual steps |
-
-**Recommendation:** [Fast Note Sync](https://github.com/haierkeys/obsidian-fast-note-sync/) provides near-instant queue delivery — your desktop starts downloading within seconds of sharing on mobile. Unlike iCloud it works cross-platform, and unlike Syncthing it needs no separate daemon.
-
-## Add to Home Screen
-
-One-tap access to the plugin input from your home screen for quick note capture.
-
-### iOS
-
-Shortcuts app → New Shortcut → Add "Open URL" → `obsidian://share-to-save` → Share → Add to Home Screen
-
-### Android
-
-Use [Shortcut Maker](https://play.google.com/store/apps/details?id=rk.android.app.shortcutmaker) to create an Intent shortcut (see plugin settings for parameters).
-
-## Submitting Issues
-
-If you encounter extraction problems, please open an issue on [GitHub Issues](https://github.com/chenxiccc/obsidian-share-to-save/issues) with the following information:
-
-1. **The URL** — The specific link you tried to save (required)
-2. **What went wrong** — Which part was not extracted correctly? (title, author, body text, images, etc.)
-3. **Failure type** — Is it:
-   - **Cannot extract at all** (nothing saved, queue stuck, error message shown)
-   - **Extraction is wrong** (saved but content is incomplete, garbled, or incorrect)
-
-Providing a sample URL is essential — different pages on the same platform can have completely different HTML structures.
-
-## License
-
-MIT
-
-This plugin bundles [defuddle](https://github.com/kepano/defuddle) (MIT © Steph Ango),
-[turndown](https://github.com/mixmark-io/turndown) (MIT © Dom Christie), and
-[@joplin/turndown-plugin-gfm](https://github.com/laurent22/joplin/tree/dev/packages/turndown-plugin-gfm) (MIT © Dom Christie).
-See [LICENSE](LICENSE) for full license texts.
-
----
-
-## 中文
-
-![用户流程图](assets/UserFlow.png)
-
-Share to Save 是一款 Obsidian 插件，将网页自动下载为 Markdown 笔记，也可以快速记录闪念文字。
-
-**1. 保存网页完整内容：** 手机端分享 / 添加链接 → 桌面端自动下载 → 保存到你的知识库
-
-**2. 保存文字：** 插件输入框里输入文字，保存
-
-**3. 闪念速记：** 桌面快捷方式一键直达输入框，见下方[创建桌面快捷方式](#创建手机桌面快捷方式-一键直达输入框闪念速记)
-
-## 典型用法
-
-- **通用网页** — 任何标准文章页面（新闻、博客、文档）均可通过内置 defuddle 兜底直接使用。
-- **微信文章** — 分享微信公众号文章到 Obsidian，本地保存包括图片在内的全部内容。
-- **小红书笔记** — 复制小红书链接，在插件中添加URL保存，本地保存笔记正文和全部图片。
-- **闪念文字** — 桌面快捷方式一键直达输入框，快速记录闪念文字或剪贴板内文字
-
-## 工作流程
-
-### 📱手机分享或添加URL → 💻电脑自动下载
-
-#### 网页保存
-
-1. 手机端分享通过分享按钮 分享到 Obsidian
-2. 在分享菜单里选择 保存到Share to Save
-3. 也可以 点击插件ribbon按钮，粘贴添加URL
-4. URL 写入 Share-to-Save文件夹下的队列文件
-5. 同步到桌面端（见下方[同步方式](#同步方式)）
-6. 桌面端插件检测到条目，自动获取网页全部内容，保存为 `.md` 笔记
-7. 桌面端可直接点击ribbon按钮输入URL提取网页内容保存
-
-#### 文字保存
-
-电脑 ribbon 按钮 ☁️ 和 手机菜单 ☰ → ☁️，打开插件输入框，输入文字后点击”保存文字”按钮
-
-## 安装说明
-
-- **iOS Obsidian ≥ 1.13.0** — Obsidian 1.13 引入了新的原生分享菜单。插件**只需安装在桌面端**（手机无需安装）。分享时，在新分享菜单的 Folder 中选择 `Share-to-Save` 目录。
-- **iOS < 1.13.0 / Android** — 需要在**手机和电脑上都安装**插件。通过 Obsidian 应用内分享菜单操作（插件会自动注入"保存到 Share to Save"按钮）。
-
-## 同步方式
-
-插件依赖文件同步将队列文件从手机传输到桌面。推荐以下方式：
-
-| 方式                                                                           | 费用 | 速度             | 配置难度                 |
-| ------------------------------------------------------------------------------ | ---- | ---------------- | ------------------------ |
-| **[Fast Note Sync](https://github.com/haierkeys/obsidian-fast-note-sync/)** | 免费 | 即时             | 简单，免费，强大         |
-| iCloud                                                                         | 免费 | ~1-10秒          | Apple 设备内置           |
-| Syncthing                                                                      | 免费 | ~1-5秒           | 跨平台，需自托管         |
-| Git                                                                            | 免费 | 需手动 push/pull | 有版本控制，但需手动操作 |
-
-**推荐：**[Fast Note Sync](https://github.com/haierkeys/obsidian-fast-note-sync/) 可实现近乎即时的队列传送——手机端分享后几秒内桌面端即开始下载。相比 iCloud 支持跨平台，相比 Syncthing 无需额外后台进程。
-
-## 创建手机桌面快捷方式 - 一键直达输入框，闪念速记
-
-### iOS
-
-快捷指令 App → 新建快捷指令 → 添加「打开 URL」→ 填入 `obsidian://share-to-save` → 分享按钮 → 添加到主屏幕
-
-### Android
-
-使用 [Shortcut Maker](https://play.google.com/store/apps/details?id=rk.android.app.shortcutmaker) 新建 Intent，填写 Action/Data URI 等参数（详见插件设置页）
-
-## 提交 Issue
-
-如有提取问题，请在 [GitHub Issues](https://github.com/chenxiccc/obsidian-share-to-save/issues) 提交，并提供以下信息：
-
-1. **提供 URL 链接** — 你尝试保存的具体链接（必填）
-2. **哪块提取不对** — 哪部分内容没有正确提取？（标题、作者、正文、图片等）
-3. **完全不能提取还是提取错误** — 属于哪种情况：
-   - **完全不能提取**（没有保存任何内容、队列卡住、显示错误信息）
-   - **提取错误**（保存了但内容不完整、乱码或不正确）
-
-提供示例 URL 至关重要——同一平台的不同页面可能拥有完全不同的 HTML 结构。
-
-## 许可
-
-MIT
-
-本插件打包了 [defuddle](https://github.com/kepano/defuddle)（MIT © Steph Ango）、
-[turndown](https://github.com/mixmark-io/turndown)（MIT © Dom Christie）和
-[@joplin/turndown-plugin-gfm](https://github.com/laurent22/joplin/tree/dev/packages/turndown-plugin-gfm)（MIT © Dom Christie）。
-完整许可证文本见 [LICENSE](LICENSE)。
+Obsidian 网页剪藏插件。本开发分支优先在 Android 上解析公开内容，直接保存
+Markdown 和附件；电脑只用于桌面剪藏或可选失败兜底，不要求电脑一直开机。
+
+当前是待最终验收的候选版，不是已经宣布发布的稳定版。插件 ID `share-to-save`、
+名称 `Share to Save`、版本 `5.4.4` 和原作者信息保持不变。
+
+## 安装与更新
+
+1. 备份 Vault，尤其是笔记、附件和任务目录。
+2. 从本分支安装包获取 `main.js`、`manifest.json`、`styles.css`，安装到
+   Android 或桌面 Vault 的 `.obsidian/plugins/share-to-save/`。
+3. 已有安装只替换这三个文件，保留 `data.json` 和所有任务文件；启用插件或
+   更新后重启 Obsidian。最低 Obsidian 版本为 1.8.7，不表示所有版本都经过真机测试。
+4. Android 可独立使用。需要桌面兜底时，在电脑安装同一版本并同步 Vault。
+
+源码仓库不一定跟踪生成的 main.js；从源码安装需先构建。Android 沙盒存储的安装
+需使用现有 Vault 文件管理方式。iOS 分享入口尚未真机验收；不再支持旧说明中
+“只在电脑安装并扫描 Markdown 分享目录”的流程。
+
+## 使用与设置
+
+Android 分享链接到 Obsidian 后，选择本插件保存网页；也可在插件输入框粘贴
+链接。桌面使用插件按钮或命令输入网址。在设置的“剪藏任务”或“查看剪藏任务”
+命令中查看状态、错误及附件警告，手动重试失败任务；中断任务可在租约到期后重试。
+
+| 设置 | 默认与含义 |
+| --- | --- |
+| 笔记目录 | `Share-to-Save` |
+| 任务目录 | `_ShareToSave/queue`，必须独立于笔记目录 |
+| 附件位置 | 遵循 Obsidian 默认附件位置，或指定自定义 Vault 目录 |
+| 自定义附件目录 | `_ShareToSave/attachments`，只在自定义策略下使用 |
+| 手机优先解析 | 开启；关闭后显式分享排队等待桌面 |
+| 桌面失败兜底 | 开启；关闭后不自动处理手机失败任务 |
+
+使用现有 Vault 同步方式，同步笔记、附件及整个任务目录（包括确认文件）。
+插件不提供独立同步服务。手机无空闲任务轮询，无启动全库任务扫描；桌面按
+设置检查任务目录。建议只指定一台自动兜底电脑。
+
+笔记优先用清理后的标题命名，同名以任务 ID 区分，不覆盖用户笔记。YAML 的
+`sts_id` 用于重试去重；删除保存的笔记后主动重新分享可以再次剪藏。移动笔记
+或删除 sts_id 可能导致识别失效。附件按内容哈希复用，不自动清理旧附件。
+失败任务保留；旧 `toBeSaved_*.json` 只在确认迁移副本后移除。普通 Markdown、
+Web Clipper 笔记不用于发现任务，也不会被转换或删除。处理具体任务时会只读
+检查输出目录的 sts_id，这不是全库扫描。
+
+现有文字/图片分享不是登录浏览器内容提取。`obsidian://share-to-save` 可打开
+输入框或传入 url/text，但没有结构化内容包导入或浏览器登录态接口。
+
+## 平台与验证范围
+
+| 平台 | 当前能力与限制 |
+| --- | --- |
+| 微信公众号、小红书 | 文章/文案、图片、元数据及短链；用户已基本 Android 真机验证，受限内容仍可能失败 |
+| 普通网页 | 现有转换器和 Defuddle；用户验证了部分公开内容，不保证所有网站 |
+| 知乎、Obsidian Publish | 保留专用转换流程，有自动化回归；Android 覆盖仍需分别确认 |
+| B站 | 视频/动态、作者、简介、封面及可选字幕；匿名视频在线测试通过，真机字幕/动态待验收 |
+| 抖音 | 公开页面数据中的文案、封面和图文；结构测试通过，用户样例返回验证页，不宣称成功 |
+| X / Twitter | 公开推文、多图及公开长文/引用数据；部分链接在线通过，年龄限制明确失败；X Articles 不支持 |
+| Instagram | 公开帖子、轮播及视频封面；先前真机失败已针对请求头修复，在线通过，Android 仍待复测 |
+
+视频默认只保存封面、文案和原链接，不下载播放文件。B站字幕优先中文官方/AI，
+再尝试其他语言，不翻译、不总结；清理格式及相邻完全重复片段，按连续语句和
+停顿分段，在简介后保存为 `## 视频字幕`。新增请求总等待上限 4 秒。
+无字幕、需要登录或接口失败不会影响原视频剪藏。
+
+## 已知限制与安全
+
+- 登录墙、年龄验证、验证码及反机器人页面不是正文，任务失败并保留，不绕过限制。
+  桌面兜底不自动拥有浏览器 Cookie，也不保证能解决访问限制。
+- 浏览器扩展、已授权页面主动提取及结构化内容包导入尚未实现，列为后续计划。
+- 图片失败可能保留远程链接并记录警告；保存成功不等于附件全部离线可用。
+- 文件同步不是分布式事务。任务锁、确认文件和稳定 ID 降低重复风险，但两台
+  离线设备同时处理后仍可能同步冲突，不能承诺绝不重复。
+- 任务和笔记包含分享链接及正文，可能含平台必需参数。不要分享携带账户凭据的
+  链接；插件没有读取浏览器 Cookie、密码或认证 Token 的功能。
+- 依赖告警尚未清零，包括 Defuddle 及预打包 XML 组件的风险。不能将本候选版
+  称为安全告警已解决；详见 [最终报告](FINAL_REPORT.md)。
+
+## 开发与验收
+
+使用 lockfile 安装：`npm ci`。执行 `npm test`、`npm run build`、
+`npm run lint`；build 包含 TypeScript 检查。默认测试跳过联网样例；
+`STS_LIVE_PLATFORM=1` 可开启对应在线测试。电脑在线/模拟测试不等于 Android
+真机通过。[平台详情](PLATFORM_REPORT.md) · [vivo 清单与最终报告](FINAL_REPORT.md)。
+
+## 许可证与致谢
+
+MIT，保留 [chenxiccc 的原始版权声明](LICENSE)。在原项目基础上增量开发，
+不使用商业应用源码。第三方许可见 [THIRDPARTY.md](THIRDPARTY.md) 和
+[完整许可文本](THIRD_PARTY_NOTICES.txt)。
+
+## English Summary
+
+This candidate development branch clips public content on Android first, with
+optional desktop fallback. Install the built main.js, manifest.json and styles.css
+into .obsidian/plugins/share-to-save/ on each device. Preserve existing settings
+and tasks when updating. Sync notes, attachments and the complete isolated task
+folder using your existing Vault sync. Failed tasks are retained and retryable.
+Existing Markdown is never used for task discovery. Authenticated browser
+extraction is a future design, not an implemented feature. Login/age/CAPTCHA
+restrictions are not bypassed. Android coverage and remaining dependency risks
+are detailed in the final report; this is not an unconditional stable release.

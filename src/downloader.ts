@@ -188,8 +188,7 @@ export class Downloader {
 	}
 
 	/**
-	 * 判断管线输出是否提取成功：有文本或图片即成功，二值判断，无阈值。
-	 * Check if pipeline output is extraction successful: any text or images = success, binary, no threshold.
+ * Validate extracted content, including placeholders and structured media posts.
 	 */
 	private static isExtractionSuccessful(parsed: ParsedContent): boolean {
 		return QualityValidator.validate(parsed).valid;

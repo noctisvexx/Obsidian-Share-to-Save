@@ -39,3 +39,14 @@ it('uses native request headers for public Instagram embeds only', async () => {
 	await mobileRequest('https://www.xiaohongshu.com/explore/example');
 	expect((network.mock.calls[2]![0] as { headers: Record<string, string> }).headers['User-Agent']).toContain('Android');
 });
+
+it('does not follow a late redirect after the request timeout', async () => {
+	vi.useFakeTimers();
+	let release!: (value: unknown) => void;
+	network.mockImplementation(() => new Promise(resolve => { release = resolve; }));
+	const pending = expect(mobileRequest('https://example.com/short')).rejects.toThrow('Network timeout');
+	await vi.advanceTimersByTimeAsync(30001); await pending;
+	release({ status: 302, headers: { location: '/late' } });
+	await vi.advanceTimersByTimeAsync(1);
+	expect(network).toHaveBeenCalledOnce();
+});

@@ -2,11 +2,11 @@
  * Share to Save 插件主入口
  * Share to Save plugin main entry
  *
- * 手机端：接收分享 URL，写入 toBeSaved_*.json 队列文件
- * 电脑端：轮询队列目录，下载内容并保存为 .md
+ * 手机端：显式分享后创建隔离任务，优先在手机解析保存。
+ * 电脑端：处理桌面任务及允许兜底的失败任务。
  *
- * Mobile: receive shared URLs, write toBeSaved_*.json queue files
- * Desktop: poll queue directory, download content and save as .md
+ * Mobile: explicit sharing creates isolated tasks and clips on-device first.
+ * Desktop: process desktop tasks and eligible failed-task fallback.
  */
 
 import { Plugin, Platform, getLanguage } from 'obsidian';

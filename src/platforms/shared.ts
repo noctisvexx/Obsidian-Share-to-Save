@@ -75,12 +75,21 @@ export function publicPage(page: Page): void {
 	const description = doc.querySelector('meta[property="og:description"]')?.getAttribute('content') || '';
 	doc.querySelectorAll('script, style').forEach(el => el.remove());
 	const body = doc.body.textContent?.trim() || '';
-	if (doc.querySelector('meta[name="rating"]')?.getAttribute('content') === 'adult'
-		|| /age-restricted|you.?ll need to log in|sign in to (?:view|continue)|content (?:is not|isn't) available/i.test(description)
-		|| /\/(?:accounts\/login|login|challenge|checkpoint)(?:\/|$)/.test(new URL(page.url).pathname)
-		|| /^(?:login|log in|sign in|access denied|just a moment|登录|安全验证|验证码)/i.test(title)
-		|| (body.length < 500 && /verify you are human|captcha|登录后查看|请完成验证|访问过于频繁|内容不存在|视频已删除|page isn't available/i.test(body)))
-		throw new AccessError('Public content unavailable: login, verification, age restriction or deleted content');
+	if (doc.querySelector('meta[name="rating"]')?.getAttribute('content') === 'adult' || /age-restricted/i.test(description))
+		throw new AccessError('年龄限制：请在平台完成年龄验证并确认访问权限；插件不绕过验证 / Age-restricted content requires platform verification and login');
+	if (/\/(?:challenge|checkpoint)(?:\/|$)/.test(new URL(page.url).pathname)
+		|| /^(?:just a moment|安全验证|验证码)/i.test(title)
+		|| (body.length < 500 && /verify you are human|captcha|请完成验证/i.test(body)))
+		throw new AccessError('页面要求验证码或安全验证，任务保留；请在平台处理 / Verification required, possibly including login');
+	if (/you.?ll need to log in|sign in to (?:view|continue)/i.test(description)
+		|| /\/(?:accounts\/login|login)(?:\/|$)/.test(new URL(page.url).pathname)
+		|| /^(?:login|log in|sign in|登录)/i.test(title)
+		|| (body.length < 500 && /登录后查看/i.test(body)))
+		throw new AccessError('页面要求登录，任务已保留；请在浏览器确认可访问内容 / Public content requires login');
+	if (/^access denied/i.test(title) || (body.length < 500 && /访问过于频繁/i.test(body)))
+		throw new AccessError('平台限制访问或请求频率，任务已保留 / Access denied or rate limited');
+	if (/content (?:is not|isn't) available/i.test(description) || (body.length < 500 && /内容不存在|视频已删除|page isn't available/i.test(body)))
+		throw new AccessError('平台报告内容不可用，可能已删除或受访问限制 / Public content is unavailable or restricted');
 }
 export async function fallback(steps: (() => Promise<ParsedContent>)[]): Promise<ParsedContent> {
 	const errors: string[] = [];

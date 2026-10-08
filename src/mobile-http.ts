@@ -8,11 +8,13 @@ export async function mobileRequest(url: string, referer?: string, binary = fals
 	checkCancelled(signal);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let rejectAbort: (() => void) | undefined;
+	let finished = false;
 	try {
 		return await Promise.race([
 			(async () => {
 				let current = url;
 				for (let hop = 0; hop <= 5; hop++) {
+					if (finished) throw new Error('Request already finished');
 					checkCancelled(signal);
 					const headers = buildHeaders(referer);
 					// Public Instagram embeds can serve an empty app shell for browser headers.
@@ -25,6 +27,7 @@ export async function mobileRequest(url: string, referer?: string, binary = fals
 						headers['User-Agent'] = XHS_MOBILE_UA;
 					if (referer) headers.Referer = referer;
 					const response = await requestUrl({ url: current, headers, throw: false });
+					if (finished) throw new Error('Request already finished');
 					checkCancelled(signal);
 					if (response.status >= 300 && response.status < 400) {
 						const location = response.headers.location || response.headers.Location;
@@ -45,6 +48,7 @@ export async function mobileRequest(url: string, referer?: string, binary = fals
 			}),
 		]);
 	} finally {
+		finished = true;
 		if (timer) clearTimeout(timer);
 		if (rejectAbort) signal?.removeEventListener('abort', rejectAbort);
 	}
