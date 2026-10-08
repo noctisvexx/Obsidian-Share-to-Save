@@ -2,6 +2,7 @@ import type { Vault } from 'obsidian';
 import type { QueueEntry, QueueEntryWithPath } from './types';
 import { UrlNormalizer } from './url-normalizer';
 import { randomId } from './random-id';
+import { findTaskNote } from './note-ownership';
 
 function validBase(value: unknown): value is Pick<QueueEntry, 'id' | 'url' | 'source' | 'createdAt'> {
 	if (!value || typeof value !== 'object') return false;
@@ -39,16 +40,23 @@ export class QueueManager {
 		if (entry.filePath !== this.path(entry)) throw new Error('Task path is not canonical');
 	}
 
-	async enqueue(entry: QueueEntry): Promise<void> {
+	async enqueue(entry: QueueEntry): Promise<'queued' | 'existing'> {
 		const url = UrlNormalizer.normalize(entry.url);
-		const existing = (await this.getEntries()).find(e => UrlNormalizer.normalize(e.url) === url && e.noteFolder === entry.noteFolder);
+		const matches = (await this.getEntries()).filter(e => UrlNormalizer.normalize(e.url) === url && e.noteFolder === entry.noteFolder);
+		const existing = matches.find(e => e.status === 'pending' || e.status === 'processing')
+			|| matches.find(e => e.status === 'failed') || matches[matches.length - 1];
 		if (existing) {
-			if (existing.status === 'failed') await this.retry(existing, entry.target, entry.allowDesktopFallback);
-			return;
+			if (existing.status === 'failed') { await this.retry(existing, entry.target, entry.allowDesktopFallback); return 'queued'; }
+			if (existing.status !== 'completed') return 'queued';
+			if (await findTaskNote(this.vault, existing.id, existing.noteFolder || this.getLegacyFolder())) return 'existing';
 		}
 		const { contentHash } = await import('./content-hash');
-		const id = 'url-' + contentHash(new TextEncoder().encode(JSON.stringify([url, entry.noteFolder || ''])));
+		const baseId = 'url-' + contentHash(new TextEncoder().encode(JSON.stringify([url, entry.noteFolder || ''])));
+		let id = baseId, generation = 1;
+		// Keep old success receipts immutable; an explicit re-share creates a new generation.
+		while (matches.some(task => task.id === id)) id = `${baseId}-r${generation++}`;
 		await this.appendEntry({ ...entry, id, url });
+		return 'queued';
 	}
 
 	private async receipt(entry: QueueEntryWithPath): Promise<QueueEntry | undefined> {

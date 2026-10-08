@@ -23,6 +23,23 @@ function setup() {
 	return { ...storage, queue, pipeline, clipper };
 }
 
+it('saves again after explicit deletion through enqueue, processing and the shared saver', async () => {
+	const { queue, pipeline, files } = setup();
+	const request = { ...QueueManager.buildEntry('https://mp.weixin.qq.com/s?mid=123', 'desktop'), target: 'desktop' as const, noteFolder: 'clips' };
+	vi.spyOn(pipeline, 'processUrl').mockImplementation((url, id, folder) => pipeline.saveNote({ title: 'Article', author: '', published: '', content: 'The article body saved again after deleting its previous Markdown result.', imageUrls: [] }, url, id, url, folder));
+	const watcher = new FileWatcher(queue, pipeline, vi.fn(), () => 1000, t, 'desktop');
+	await queue.enqueue(request); await watcher.processNow();
+	const first = files.get('clips/Article.md');
+	expect(first).toBeDefined();
+	files.delete('clips/Article.md');
+	await queue.enqueue(request); await watcher.processNow();
+	expect(files.get('clips/Article.md')).toBeDefined();
+	expect(files.get('clips/Article.md')).not.toBe(first);
+	expect([...files.keys()].filter(path => path.endsWith('.md'))).toHaveLength(1);
+	expect((await queue.getEntries()).map(entry => entry.status)).toEqual(['completed', 'completed']);
+	expect(await queue.enqueue(request)).toBe('existing');
+});
+
 it('retains a mobile HTTP failure, retries it by hand and confirms only one note', async () => {
 	const { queue, clipper, files } = setup();
 	network.mockResolvedValue({ status: 503, headers: {} });

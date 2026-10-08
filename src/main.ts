@@ -164,14 +164,14 @@ export default class ShareToSavePlugin extends Plugin {
 			return;
 		}
 
-		await this.enqueueUrl(url);
-
-		// 桌面端立即触发处理 / Desktop: trigger immediate processing
-		if (Platform.isDesktop || this.settings.mobileFirst) {
-			await this.fileWatcher?.processNow();
+		try {
+			const status = await this.enqueueUrl(url);
+			showNotice(status === 'existing' ? '文章已保存，无需重复剪藏 / Article already saved'
+				: '任务已接收，可在剪藏任务中查看结果 / Task received; see clipping tasks');
+			if (Platform.isDesktop || this.settings.mobileFirst) await this.fileWatcher?.processNow();
+		} catch (error) {
+			showNotice(this.t('notice.downloadFailed', { error: error instanceof Error ? error.message : String(error) }), 5000);
 		}
-
-		showNotice('任务已接收，可在剪藏任务中查看结果 / Task received; see clipping tasks');
 	}
 
 	/**
@@ -293,13 +293,13 @@ export default class ShareToSavePlugin extends Plugin {
 			() => Platform.isMobile && this.settings.mobileFirst ? 'mobile' : 'desktop').open();
 	}
 
-	private async enqueueUrl(url: string): Promise<void> {
+	private async enqueueUrl(url: string): Promise<'queued' | 'existing'> {
 		const entry = QueueManager.buildEntry(url, Platform.isDesktop ? 'desktop' : 'mobile');
 		entry.target = Platform.isMobile && this.settings.mobileFirst ? 'mobile' : 'desktop';
 		entry.originDevice = this.settings.deviceId;
 		entry.allowDesktopFallback = this.settings.desktopFallback;
 		entry.noteFolder = this.settings.outputFolder;
-		await this.queueManager.enqueue(entry);
+		return this.queueManager.enqueue(entry);
 	}
 
 	private async getProcessor(): Promise<{ processUrl(url: string, id: string, folder?: string, signal?: AbortSignal): Promise<ProcessResult> }> {

@@ -93,3 +93,24 @@ Reports: this file and the acceptance report follow-up.
    desktop fallback after sync and verify successful mobile clips stay completed.
 
 Await the user's next Android results. Stage 3 remains paused.
+
+## Deleted-note re-share follow-up
+
+This is a platform-independent queue bug, not a WeChat converter bug. Completed
+tasks were deduplicated without checking whether the saved result still existed.
+Explicit re-share now checks task ownership in the snapshotted note folder; if
+missing, it creates a deterministic next-generation task ID and keeps the old
+task, claim and completion receipt intact. Repeated shares while this new task
+is pending, failed or processing reuse it. Existing and renamed notes still
+deduplicate. Automatic polling never recreates deleted notes.
+
+The share-menu acknowledgement now appears before processing so it does not
+replace the final success/failure notification. Sharing an existing saved article
+explicitly reports that it is already saved. A note moved outside its snapshotted
+folder cannot be located by this bounded lookup; syncing devices should finish
+sync before re-sharing to avoid interpreting a not-yet-synced note as deleted.
+
+Verification: 96 passing tests, one normally skipped live test; build/typecheck
+and lint pass. New cases cover WeChat, XHS, Zhihu and generic URLs, renamed notes,
+immutable old receipts, failed new-generation retry and actual shared-saver
+recreation. These remain simulated Vault tests, not Android acceptance.

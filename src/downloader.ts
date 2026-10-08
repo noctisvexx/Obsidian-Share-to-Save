@@ -15,7 +15,7 @@ import { HeadlessExtractor } from './headless-extractor';
 import { findConverter, genericConverter } from './content-converter';
 import { QualityValidator } from './quality-validator';
 import { checkCancelled } from './cancellation';
-import { noteOwner } from './note-ownership';
+import { noteOwner, findTaskNote } from './note-ownership';
 import { MetadataExtractor } from './metadata-extractor';
 
 /** 最大重定向次数 / Maximum redirect hops */
@@ -271,20 +271,8 @@ export class Downloader {
 	}
 
 	async existingTaskNote(id: string, folder = this.settings.outputFolder): Promise<ProcessResult | null> {
-		const path = this.taskNotePath(id, folder);
-		if (await this.vault.adapter.exists(path)) {
-			const content = await this.vault.adapter.read(path);
-			if (noteOwner(content) !== id) throw new Error('Existing note path belongs to another note');
-			return { success: true, title: path.split('/').pop() };
-		}
-		if (!await this.vault.adapter.exists(folder)) return null;
-		// Explicit task lookup only: never discover work from Markdown or scan the Vault.
-		for (const candidate of (await this.vault.adapter.list(folder)).files) {
-			if (!candidate.startsWith(folder + '/') || candidate.slice(folder.length + 1).includes('/') || !candidate.endsWith('.md')) continue;
-			if (noteOwner(await this.vault.adapter.read(candidate)) === id)
-				return { success: true, title: candidate.split('/').pop() };
-		}
-		return null;
+		const path = await findTaskNote(this.vault, id, folder);
+		return path ? { success: true, title: path.split('/').pop() } : null;
 	}
 
 	private async titleNotePath(title: string, id: string, folder: string): Promise<string> {

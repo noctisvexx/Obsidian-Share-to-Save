@@ -18,6 +18,37 @@ function setup() {
 }
 
 describe('safe queue storage', () => {
+	it.each(['https://mp.weixin.qq.com/s?mid=123', 'https://www.xiaohongshu.com/explore/123', 'https://zhuanlan.zhihu.com/p/123', 'https://example.com/article'])('explicitly re-clips a deleted completed result for %s without deleting receipts', async url => {
+		const { queue, files } = setup();
+		const request = { ...QueueManager.buildEntry(url, 'desktop'), target: 'desktop' as const, noteFolder: 'clips' };
+		await queue.enqueue(request);
+		const original = (await queue.getEntries())[0]!;
+		files.set('clips/Article.md', `---\nsts_id: ${original.id}\n---\nArticle`);
+		await queue.claim(original); await queue.finish(original);
+		const receipt = files.get(original.filePath + '.done');
+		expect(await queue.enqueue(request)).toBe('existing');
+		files.delete('clips/Article.md');
+		await queue.enqueue(request); await queue.enqueue(request);
+		const pending = await queue.getPendingEntries('desktop');
+		expect(pending).toHaveLength(1);
+		expect(pending[0]?.id).not.toBe(original.id);
+		expect(files.get(original.filePath + '.done')).toBe(receipt);
+		await queue.claim(pending[0]!); await queue.finish(pending[0]!, 'network failure');
+		await queue.enqueue(request);
+		expect((await queue.getPendingEntries('desktop'))[0]?.id).toBe(pending[0]?.id);
+	});
+	it('does not re-clip a renamed task-owned note or change a foreign same-title note', async () => {
+		const { queue, files } = setup();
+		const request = { ...QueueManager.buildEntry('https://example.com', 'desktop'), noteFolder: 'clips' };
+		await queue.enqueue(request);
+		const entry = (await queue.getEntries())[0]!;
+		await queue.claim(entry); await queue.finish(entry);
+		files.set('clips/Renamed.md', `---\nsts_id: ${entry.id}\n---\nSaved`);
+		files.set('clips/Article.md', 'Foreign note');
+		expect(await queue.enqueue(request)).toBe('existing');
+		expect(await queue.getPendingEntries()).toHaveLength(0);
+		expect(files.get('clips/Article.md')).toBe('Foreign note');
+	});
 	it('deduplicates repeated shares including offline producers using deterministic IDs', async () => {
 		const a = setup(); const b = setup();
 		await a.queue.enqueue({ ...QueueManager.buildEntry('https://example.com/post?utm_source=phone', 'mobile'), noteFolder: 'clips' });
