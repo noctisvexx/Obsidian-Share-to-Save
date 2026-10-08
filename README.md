@@ -1,10 +1,16 @@
-# Share to Save
+# noctis
 
 Obsidian 网页剪藏插件。本开发分支优先在 Android 上解析公开内容，直接保存
 Markdown 和附件；电脑只用于桌面剪藏或可选失败兜底，不要求电脑一直开机。
 
-当前是待最终验收的候选版，不是已经宣布发布的稳定版。插件 ID `share-to-save`、
-名称 `Share to Save`、版本 `5.4.4` 和原作者信息保持不变。
+这是由 **noctis** 维护的独立 fork，基于 **chenxiccc** 的
+[Obsidian Share to Save](https://github.com/chenxiccc/obsidian-share-to-save)
+增量开发，不是原作者发布的版本，也不表示原作者认可本分支的改动。
+[本项目仓库](https://github.com/noctisvexx/Obsidian-Share-to-Save)。
+
+插件显示名称和当前作者为 `noctis`。为兼容现有安装、设置和任务，插件 ID
+仍为 `share-to-save`，版本暂为 `5.4.4`；旧文件夹、URI 和任务标识不更名。
+当前仍为待最终验收的候选版，尚未宣布正式发布。
 
 ## 安装与更新
 
@@ -58,7 +64,7 @@ Web Clipper 笔记不用于发现任务，也不会被转换或删除。处理�
 | B站 | 视频/动态、作者、简介、封面及可选字幕；匿名视频在线测试通过，真机字幕/动态待验收 |
 | 抖音 | 公开页面数据中的文案、封面和图文；结构测试通过，用户样例返回验证页，不宣称成功 |
 | X / Twitter | 公开推文、多图及公开长文/引用数据；部分链接在线通过，年龄限制明确失败；X Articles 不支持 |
-| Instagram | 公开帖子、轮播及视频封面；先前真机失败已针对请求头修复，在线通过，Android 仍待复测 |
+| Instagram | 公开帖子、轮播及视频封面；请求头修复后用户已确认原链接 Android 真机剪藏正常，不代表所有帖子均可访问 |
 
 视频默认只保存封面、文案和原链接，不下载播放文件。B站字幕优先中文官方/AI，
 再尝试其他语言，不翻译、不总结；清理格式及相邻完全重复片段，按连续语句和
@@ -87,14 +93,17 @@ Web Clipper 笔记不用于发现任务，也不会被转换或删除。处理�
 
 ## 许可证与致谢
 
-MIT，保留 [chenxiccc 的原始版权声明](LICENSE)。在原项目基础上增量开发，
+沿用 MIT，保留 [chenxiccc 的原始版权声明](LICENSE)，同时标明 noctis 对新增和
+修改部分的版权。当前维护者/插件作者是 noctis；上游项目作者仍是 chenxiccc。
 不使用商业应用源码。第三方许可见 [THIRDPARTY.md](THIRDPARTY.md) 和
 [完整许可文本](THIRD_PARTY_NOTICES.txt)。
 
 ## English Summary
 
 This candidate development branch clips public content on Android first, with
-optional desktop fallback. Install the built main.js, manifest.json and styles.css
+optional desktop fallback. noctis is the current maintainer. It is an independent
+fork of chenxiccc's Share to Save, not an upstream release. The original MIT
+attribution is retained. Install the built main.js, manifest.json and styles.css
 into .obsidian/plugins/share-to-save/ on each device. Preserve existing settings
 and tasks when updating. Sync notes, attachments and the complete isolated task
 folder using your existing Vault sync. Failed tasks are retained and retryable.

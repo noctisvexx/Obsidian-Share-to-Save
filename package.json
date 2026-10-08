@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-share-to-save",
+	"name": "obsidian-noctis",
 	"version": "5.4.4",
-	"description": "Save shared web content to your Obsidian vault. Share URLs from mobile, download and save on desktop.",
+	"description": "Mobile-first web clipping to Markdown with attachments, retryable tasks and optional desktop fallback.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
@@ -19,7 +19,7 @@
 		"save",
 		"web-clipper"
 	],
-	"author": "",
+	"author": "noctis",
 	"license": "MIT",
 	"devDependencies": {
 		"@eslint/compat": "^2.1.0",

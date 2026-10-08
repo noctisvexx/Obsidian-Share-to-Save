@@ -13,8 +13,8 @@ export type Translator = (key: string, params?: Record<string, string>) => strin
 /** 所有 UI 字符串 / All UI strings */
 export const STRINGS: Record<string, { zh: string; en: string }> = {
 	'ribbon.tooltip': {
-		zh: 'Share to Save：保存内容',
-		en: 'Share to Save: Save Content',
+		zh: 'noctis：保存内容',
+		en: 'noctis: Save Content',
 	},
 	'modal.title': {
 		zh: '保存内容',
@@ -89,8 +89,8 @@ export const STRINGS: Record<string, { zh: string; en: string }> = {
 		en: 'Each path segment in folder name cannot be empty',
 	},
 	'settings.title': {
-		zh: 'Share to Save 设置',
-		en: 'Share to Save Settings',
+		zh: 'noctis 设置',
+		en: 'noctis Settings',
 	},
 	'settings.usage.heading': {
 		zh: '使用说明',

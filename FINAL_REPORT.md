@@ -1,9 +1,10 @@
-# Share to Save 最终收尾验收报告
+# noctis 最终收尾验收报告
 
 日期：2026-10-08（Asia/Shanghai）。分支：`codex/mobile-first-clipper`。
 交付性质：待最终真机验收的候选版，非无条件稳定发布声明。
-没有修改或合并 main。ID、名称、版本和作者字段保持原样；LICENSE 的
-Copyright (c) 2025 chenxiccc 保持不变，等待用户决定命名与正式发布。
+没有修改或合并 main。用户确认后，插件显示名称及当前作者改为 noctis。
+ID share-to-save 与版本 5.4.4 保留以兼容现有安装。LICENSE 保留
+Copyright (c) 2025 chenxiccc，并增加 Copyright (c) 2026 noctis (modifications)。
 
 ## 完成范围
 
@@ -37,7 +38,7 @@ AI 字幕，再尝试其他语言。只下载公开暴露的字幕，不使用 C
 
 ## 验证结果
 
-最终离线自动化：160 通过，4 个可选联网测试跳过，共 19 个测试文件。
+最终离线自动化：162 通过，4 个可选联网测试跳过，共 20 个测试文件。
 TypeScript：`npm run build` 内置检查通过；生产构建、Lint、diff 检查通过。
 可选联网测试不属于默认通过数量，本轮收尾没有再次宣称全平台在线通过。
 
@@ -60,7 +61,7 @@ TypeScript：`npm run build` 内置检查通过；生产构建、Lint、diff 检
 | B站视频 | 自动化；用户短链曾匿名在线通过 | vivo 基础保存、分集字幕、动态多图待确认；无字幕为正常降级 |
 | 抖音 | 真实分享跳转及验证壳观察；结构模拟测试 | 用户样例不可公开获取，不能宣称真机剪藏成功 |
 | X | 公共推文曾匿名在线通过；受限样例拒绝测试 | vivo、长推文/引用需对照；X Articles 不支持；年龄限制不绕过 |
-| Instagram | 曾匿名在线提取轮播；真机失败后请求头修复及在线复测通过 | 修复未获用户真机成功确认，不宣称适配完成 |
+| Instagram | 请求头修复后，用户已确认原分享链接 Android 真机测试正常 | 不推定所有帖子、私有内容或其他设备均可用 |
 
 浏览器主动提取/扩展/已授权内容包导入尚未实现。现有保存文字、图片及 URI
 输入不等于该功能，因此没有虚构“主动导入集成测试通过”。这些属于后续计划，
@@ -102,7 +103,7 @@ omit=dev：5 个包告警（1 low、2 moderate、2 high）。这是包数量，�
    留下不再引用的文件。为数据安全不自动删除这些附件。
 5. 附件警告不把整篇文章判失败；用户需检查图片是否离线，CDN 地址可能过期。
 6. 标题/ID 改动不迁移或重命名已有笔记；旧 Clip-ID 命名保持可识别。
-7. 本候选版仍标记 5.4.4，避免未经命名/发布决定更改身份。正式发布时需要用户
+7. 本候选版仍标记 5.4.4，保留安装 ID；更名没有迁移用户数据。正式发布时需要用户
    决定版本号和发布方式，不能把旧同版本社区包视为本分支构建。
 
 ## vivo Android 最终验收清单
@@ -129,13 +130,19 @@ omit=dev：5 个包告警（1 low、2 moderate、2 high）。这是包数量，�
 
 ## 交付与合并结论
 
-安装包：`tmp/share-to-save-mobile-first.zip`，包含 main.js、manifest.json、
+安装包：`tmp/noctis.zip`，包含 main.js、manifest.json、
 styles.css 及许可说明。SHA-256 随交付产物提供；仓库根目录也有生产构建文件。
-安装包 SHA-256：`C5CA22D0A431DE9D671157A7BB15456F310FB226D13AD26CE7F6A0B9ABE469D1`。
+安装包 SHA-256：`D2E2EBFE6CF94F9137782D537DCE12CACDBDF16A9FAF53FB82E27BBC2F84DA5C`。
 本轮修改：README.md、THIRDPARTY.md、THIRD_PARTY_NOTICES.txt、FINAL_REPORT.md、
 src/main.ts、src/downloader.ts、src/mobile-http.ts、src/platforms/shared.ts、
 tests/mobile-http.test.ts、tests/public-page.test.ts、tests/twitter.test.ts。
 
 结论：具备交付最终验收的条件，但不建议现在无条件合并 main 并标记为稳定版。
-需用户完成重点 vivo 验收，明确生产依赖风险的修补或接受决定，并确认命名、版本
-及发布安排。开发停止，等待用户验收；没有擅自更名、发布或合并。
+需用户完成剩余重点 vivo 验收，明确生产依赖风险的修补或接受决定，并确认版本
+及发布安排。按用户要求更名并标明 fork 归属；没有发布或合并 main。
+
+更名补充：manifest/package 作者和显示名称、界面设置/按钮名称已更新；保留
+share-to-save ID、旧目录、URI、任务/YAML 标识以兼容既有安装和重试。README
+明确区分 noctis 维护版本与 chenxiccc 上游版本；MIT 原声明和第三方许可不移除。
+新增 tests/branding.test.ts 验证品牌、安装 ID 及两方版权声明。
+用户确认原 Instagram 分享链接已通过 Android 真机测试；不推定其他帖子都可用。
