@@ -1,3 +1,4 @@
+// eslint-disable-next-line import/no-nodejs-modules -- Node-only metadata test, not bundled into the plugin.
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { createTranslator } from '../src/i18n';
