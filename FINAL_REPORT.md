@@ -1,8 +1,8 @@
-# noctis 最终收尾验收报告
+# share-to-clipper 最终收尾验收报告
 
 日期：2026-10-08（Asia/Shanghai）。分支：`codex/mobile-first-clipper`。
 交付性质：待最终真机验收的候选版，非无条件稳定发布声明。
-没有修改或合并 main。用户确认后，插件显示名称及当前作者改为 noctis。
+没有修改或合并 main。插件显示名称为 share-to-clipper，当前作者为 noctis。
 用户授权测试 Vault 使用独立 ID share-to-clipper，版本暂为 5.4.4。LICENSE 保留
 Copyright (c) 2025 chenxiccc，并增加 Copyright (c) 2026 noctis (modifications)。
 
@@ -130,9 +130,9 @@ omit=dev：5 个包告警（1 low、2 moderate、2 high）。这是包数量，�
 
 ## 交付与合并结论
 
-安装包：`tmp/noctis.zip`，包含 main.js、manifest.json、
+安装包：`tmp/share-to-clipper.zip`，包含 main.js、manifest.json、
 styles.css 及许可说明。SHA-256 随交付产物提供；仓库根目录也有生产构建文件。
-安装包 SHA-256：`2C1F10ECCFAF555DCACD8808357C457DD438C2B7ADFF4C60A71CFE61A1C621DA`。
+安装包 SHA-256：`3B0481CE6AE5ABD761E363D56DA6122BF4BECF9EB8C0F2DA67270F41F7BA1ECD`。
 本轮修改：README.md、THIRDPARTY.md、THIRD_PARTY_NOTICES.txt、FINAL_REPORT.md、
 src/main.ts、src/downloader.ts、src/mobile-http.ts、src/platforms/shared.ts、
 tests/mobile-http.test.ts、tests/public-page.test.ts、tests/twitter.test.ts。

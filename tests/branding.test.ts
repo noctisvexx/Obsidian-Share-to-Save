@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { createTranslator } from '../src/i18n';
 
-it('uses noctis branding with an independent installation identity', () => {
+it('uses share-to-clipper branding and noctis authorship with an independent identity', () => {
 	const manifest = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')) as Record<string, unknown>;
-	expect(manifest.name).toBe('noctis'); expect(manifest.author).toBe('noctis');
+	expect(manifest.name).toBe('share-to-clipper'); expect(manifest.author).toBe('noctis');
 	expect(manifest.id).toBe('share-to-clipper'); expect(manifest.isDesktopOnly).toBe(false);
 	for (const locale of ['zh', 'en'] as const) {
 		const t = createTranslator(locale);
-		expect(t('ribbon.tooltip')).toContain('noctis'); expect(t('settings.title')).toContain('noctis');
+		expect(t('ribbon.tooltip')).toContain('share-to-clipper'); expect(t('settings.title')).toContain('share-to-clipper');
 	}
 });
 it('retains upstream MIT attribution alongside modification attribution', () => {

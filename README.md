@@ -1,4 +1,4 @@
-# noctis
+# share-to-clipper
 
 Obsidian 网页剪藏插件。本开发分支优先在 Android 上解析公开内容，直接保存
 Markdown 和附件；电脑只用于桌面剪藏或可选失败兜底，不要求电脑一直开机。
@@ -8,7 +8,7 @@ Markdown 和附件；电脑只用于桌面剪藏或可选失败兜底，不要�
 增量开发，不是原作者发布的版本，也不表示原作者认可本分支的改动。
 [本项目仓库](https://github.com/noctisvexx/Obsidian-Share-to-Save)。
 
-插件显示名称和当前作者为 `noctis`。插件 ID 为独立的 `share-to-clipper`，
+插件显示名称和独立 ID 均为 `share-to-clipper`，作者为 `noctis`，
 与原插件市场更新隔离；版本暂为 `5.4.4`。笔记/附件目录及任务标识不更名。
 当前仍为待最终验收的候选版，尚未宣布正式发布。
 
