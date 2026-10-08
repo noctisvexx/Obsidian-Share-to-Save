@@ -8,6 +8,9 @@ export class QualityValidator {
 		if (blocked.test(parsed.title.trim()) || (placeholders.test(text) && text.length < 300))
 			return { valid: false, reason: 'Login wall, error page or app-only placeholder', score: 0 };
 		const mediaCount = parsed.media?.filter(m => m.candidates.length).length ?? parsed.imageUrls.length;
+		if (parsed.contentKind === 'video' && parsed.title.trim() && parsed.author.trim() && mediaCount > 0)
+			return { valid: true, score: 100 + mediaCount };
+		if (parsed.contentKind === 'post' && (text || mediaCount > 0)) return { valid: true, score: 100 + text.length + mediaCount };
 		if (parsed.mediaOnly && mediaCount > 0) return { valid: true, score: 100 + mediaCount };
 		if (!text || text === parsed.title.trim() || text.length < 40)
 			return { valid: false, reason: 'Body is empty or incomplete', score: 0 };

@@ -5,6 +5,7 @@ import { ResolverRegistry } from './resolver-registry';
 import type { PlatformResolver } from './resolver-registry';
 import { UrlNormalizer } from './url-normalizer';
 import { checkCancelled } from './cancellation';
+import { BilibiliResolver } from './platforms/bilibili';
 
 export class MobileClipper {
 	constructor(private pipeline: Downloader) {}
@@ -31,6 +32,10 @@ export class MobileClipper {
 				const contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
 				if (/(?:application\/json|image\/|video\/)/i.test(contentType)) throw new Error('Response is not an HTML page');
 				const canonicalUrl = UrlNormalizer.canonical(response.text, response.url);
+				if (generic && /(?:^|\.)(?:bilibili\.com|b23\.tv)$/.test(new URL(url).hostname)) {
+					const doc = new DOMParser().parseFromString(response.text, 'text/html');
+					if (!doc.querySelector('article, .opus-content')) throw new Error('No verified public platform body for generic fallback');
+				}
 				if (/(?:^|\.)(?:xiaohongshu\.com|xhslink\.(?:com|cn))$/.test(new URL(canonicalUrl).hostname)) {
 					const doc = new DOMParser().parseFromString(response.text, 'text/html');
 					doc.querySelectorAll('script, style').forEach(element => element.remove());
@@ -45,7 +50,7 @@ export class MobileClipper {
 				return { ...parsed, originalUrl: url, canonicalUrl: resolvedUrl, platform: new URL(resolvedUrl).hostname };
 			},
 		});
-		return new ResolverRegistry([createResolver(false)], createResolver(true));
+		return new ResolverRegistry([new BilibiliResolver((url, referer) => mobileRequest(url, referer, false, signal)), createResolver(false)], createResolver(true));
 	}
 	async processUrl(url: string, id: string, folder?: string, signal?: AbortSignal): Promise<ProcessResult> {
 		try {
