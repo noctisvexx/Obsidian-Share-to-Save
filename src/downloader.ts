@@ -179,7 +179,7 @@ export class Downloader {
 			if (metadata.author) metadata.author = postprocessContent(metadata.author);
 
 			const imageUrls = Downloader.extractImageUrls(content);
-			return { ...metadata, content, imageUrls, mediaOnly: result.mediaOnly
+			return { ...metadata, content, imageUrls, canonicalUrl: result.canonicalUrl, mediaOnly: result.mediaOnly
 				|| (!generic && new URL(url).hostname === 'mp.weixin.qq.com' && doc.querySelectorAll('.img_swiper_area img').length >= 2) };
 		} catch (err) {
 			console.warn('Share to Save: 转换管线失败 / Pipeline failed:', err);
@@ -222,12 +222,13 @@ export class Downloader {
 		checkCancelled(signal);
 		const saved = await this.existingTaskNote(stsId, folder);
 		if (saved) return saved;
-		const safeTitle = Downloader.sanitizeNoteTitle(parsed.title || 'Untitled');
+		const normalizedTitle = normalizeTitle(parsed.title || '');
+		const safeTitle = normalizedTitle ? sanitizeFilename(normalizedTitle) : '';
 
 		const frontmatter = Downloader.buildFrontmatter(parsed, inputUrl, stsId);
 		let mdContent = frontmatter + '\n' + parsed.content.trimStart();
 
-		const finalPath = this.taskNotePath(stsId, folder);
+		const finalPath = await this.titleNotePath(safeTitle, stsId, folder);
 		mdContent = await this.imageHandler.processContent(mdContent, safeTitle, canonicalUrl, finalPath, signal);
 		const warnings = Downloader.extractImageUrls(mdContent).map(url => `Attachment not downloaded: ${url}`);
 		for (const media of parsed.media || []) {
@@ -271,10 +272,40 @@ export class Downloader {
 
 	async existingTaskNote(id: string, folder = this.settings.outputFolder): Promise<ProcessResult | null> {
 		const path = this.taskNotePath(id, folder);
-		if (!await this.vault.adapter.exists(path)) return null;
-		const content = await this.vault.adapter.read(path);
-		if (noteOwner(content) !== id) throw new Error('Existing note path belongs to another note');
-		return { success: true, title: path.split('/').pop() };
+		if (await this.vault.adapter.exists(path)) {
+			const content = await this.vault.adapter.read(path);
+			if (noteOwner(content) !== id) throw new Error('Existing note path belongs to another note');
+			return { success: true, title: path.split('/').pop() };
+		}
+		if (!await this.vault.adapter.exists(folder)) return null;
+		// Explicit task lookup only: never discover work from Markdown or scan the Vault.
+		for (const candidate of (await this.vault.adapter.list(folder)).files) {
+			if (!candidate.startsWith(folder + '/') || candidate.slice(folder.length + 1).includes('/') || !candidate.endsWith('.md')) continue;
+			if (noteOwner(await this.vault.adapter.read(candidate)) === id)
+				return { success: true, title: candidate.split('/').pop() };
+		}
+		return null;
+	}
+
+	private async titleNotePath(title: string, id: string, folder: string): Promise<string> {
+		const fallback = this.taskNotePath(id, folder);
+		if (!title) return fallback;
+		let base = Array.from(title).slice(0, 100).join('').replace(/[. ]+$/, '');
+		if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base)) base = '_' + base;
+		if (!base) return fallback;
+		let path = normalizePath(`${folder}/${base}.md`);
+		let counter = 0;
+		while (await this.vault.adapter.exists(path)) {
+			if (noteOwner(await this.vault.adapter.read(path)) === id) return path;
+			let collisionTitle = '';
+			for (const char of Array.from(base)) {
+				if (new TextEncoder().encode(collisionTitle + char).length > 90) break;
+				collisionTitle += char;
+			}
+			path = normalizePath(`${folder}/${collisionTitle} (${id}${counter ? '-' + counter : ''}).md`);
+			counter++;
+		}
+		return path;
 	}
 
 	/**

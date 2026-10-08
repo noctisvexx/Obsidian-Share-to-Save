@@ -56,7 +56,7 @@ it('desktop fallback consumes a mobile failure only when allowed and uses the sa
 	await desktop.processNow(); expect(desktopProcess).not.toHaveBeenCalled();
 	enabled = true; await desktop.processNow(); await desktop.processNow();
 	expect(desktopProcess).toHaveBeenCalledOnce(); expect((await queue.getEntries())[0]?.status).toBe('completed');
-	expect([...files.keys()].some(path => path.startsWith('original/Clip-'))).toBe(true);
+	expect(files.has('original/Recovered.md')).toBe(true);
 	expect(files.get('clips/web-clipper.md')).toBe(oldMarkdown); expect(files.get('media/old.png')).toBe(oldBinary);
 	expect(files.get('clips/plain.md')).toBe('[URL](https://example.com)');
 	expect(adapter.remove.mock.calls.every(([path]) => path.endsWith('.claim'))).toBe(true);

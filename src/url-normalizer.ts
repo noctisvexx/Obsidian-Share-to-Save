@@ -1,4 +1,18 @@
 export class UrlNormalizer {
+	static shortLinkTarget(html: string, fetchedUrl: string): string | null {
+		if (!/(?:^|\.)xhslink\.(?:com|cn)$/.test(new URL(fetchedUrl).hostname)) return null;
+		const doc = new DOMParser().parseFromString(html, 'text/html');
+		const refresh = Array.from(doc.querySelectorAll('meta')).find(meta => meta.getAttribute('http-equiv')?.toLowerCase() === 'refresh')?.getAttribute('content');
+		const href = refresh?.match(/^\s*\d+(?:\.\d+)?\s*;\s*url\s*=\s*["']?([^"']+)["']?\s*$/i)?.[1]
+			|| Array.from(doc.querySelectorAll('script')).map(script => script.textContent || '').join('\n')
+				.match(/(?:window\.)?location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/)?.[1];
+		if (!href) return null;
+		try {
+			const target = new URL(href.trim(), fetchedUrl);
+			if (!['http:', 'https:'].includes(target.protocol) || !/(?:^|\.)(?:xiaohongshu\.com|xhslink\.(?:com|cn))$/.test(target.hostname)) return null;
+			return UrlNormalizer.normalize(target.href);
+		} catch { return null; }
+	}
 	static normalize(input: string): string {
 		const url = new URL(input);
 		if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Only HTTP URLs can be clipped');
@@ -16,7 +30,7 @@ export class UrlNormalizer {
 		try {
 			const canonical = new URL(href, fetchedUrl);
 			const originalHost = new URL(fetchedUrl).hostname;
-			const trustedShortLink = /(?:^|\.)xhslink\.com$/.test(originalHost) && /(?:^|\.)xiaohongshu\.com$/.test(canonical.hostname);
+			const trustedShortLink = /(?:^|\.)xhslink\.(?:com|cn)$/.test(originalHost) && /(?:^|\.)xiaohongshu\.com$/.test(canonical.hostname);
 			if (canonical.hostname !== originalHost && !trustedShortLink) return fetchedUrl;
 			// Preserve access tokens omitted by canonical tags.
 			for (const key of ['xsec_token', 'xsec_source']) {

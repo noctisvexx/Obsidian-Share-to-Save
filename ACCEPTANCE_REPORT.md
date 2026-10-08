@@ -111,3 +111,12 @@ Use a backed-up test Vault, not the only copy of important notes.
    URLs, task messages and screenshots for any failures.
 
 Await user confirmation before further development or stage 3.
+
+## Android feedback follow-up
+
+The user's actual XHS `.cn` share link and title-filename feedback are addressed
+in `ANDROID_FIX_REPORT.md`. The newer suite has 90 passing automated tests and
+one normally skipped live test. The live test was run separately and passed with
+real fetched HTML, mocked Vault/media and Android-UA headers. New clips use
+article-title filenames; old task-owned notes remain unchanged. Android retesting
+and actual sync verification remain necessary.

@@ -16,6 +16,7 @@ import { escapeObsidianTags, escapeLinkDestination, ANGLT, ANGGT } from './text-
 
 /** 内容转换结果 / Content conversion result */
 export interface ConvertResult {
+	canonicalUrl?: string;
 	mediaOnly?: boolean;
 	/** Markdown 正文 / Markdown body */
 	markdown: string;
@@ -443,14 +444,17 @@ class WeChatConverter implements ContentConverter {
 interface XhsNoteImage {
 	urlDefault?: string;
 	url?: string;
+	infoList?: { url?: string; imageScene?: string }[];
 }
 
 interface XhsNoteUser {
 	nickname?: string;
+	nickName?: string;
 	userId?: string;
 }
 
 interface XhsNote {
+	noteId?: string;
 	type?: string;
 	title?: string;
 	desc?: string | string[];
@@ -464,7 +468,9 @@ interface XhsNoteDetailMap {
 }
 
 interface XhsInitialState {
+	noteData?: { routeQuery?: { xsec_token?: string; xsec_source?: string }; data?: { noteData?: XhsNote } };
 	note?: {
+		currentNoteId?: string;
 		noteDetailMap?: XhsNoteDetailMap;
 	};
 }
@@ -497,7 +503,7 @@ interface ZhihuAnswerInfo {
 // ─── 小红书转换器 / Xiaohongshu Converter ────────────────────────────────────
 
 class XiaohongshuConverter implements ContentConverter {
-	readonly domainPattern = /(?:www\.)?xiaohongshu\.com/;
+	readonly domainPattern = /^https?:\/\/(?:[^/]+\.)?(?:xiaohongshu\.com|xhslink\.(?:com|cn))(?::\d+)?\//;
 
 	convert(doc: Document, url: string): ConvertResult {
 		const state = this.findInitialStateScript(doc);
@@ -505,12 +511,10 @@ class XiaohongshuConverter implements ContentConverter {
 			return { markdown: this.fallbackExtract(doc) };
 		}
 
-		const noteDetailMap = state?.note?.noteDetailMap;
-		if (!noteDetailMap) return { markdown: this.fallbackExtract(doc) };
-
-		const noteId = Object.keys(noteDetailMap)[0];
-		if (!noteId) return { markdown: this.fallbackExtract(doc) };
-		const note = noteDetailMap[noteId]?.note;
+		const noteDetailMap = state.note?.noteDetailMap;
+		const requestedId = new URL(url).pathname.match(/\/(?:explore|discovery\/item)\/([^/]+)/)?.[1];
+		const noteId = requestedId || state.note?.currentNoteId || Object.keys(noteDetailMap || {}).find(key => noteDetailMap?.[key]?.note);
+		const note = state.noteData?.data?.noteData || (noteId ? noteDetailMap?.[noteId]?.note : undefined);
 		if (!note) return { markdown: this.fallbackExtract(doc) };
 
 		const parts: string[] = [];
@@ -539,7 +543,8 @@ class XiaohongshuConverter implements ContentConverter {
 		if (images && images.length > 0) {
 			parts.push('');
 			for (const img of images) {
-				const imgUrl = img.urlDefault || img.url;
+				const imgUrl = img.urlDefault || img.url || img.infoList?.find(info => info.imageScene === 'WB_DFT')?.url
+					|| img.infoList?.find(info => info.url)?.url;
 				if (imgUrl) {
 					parts.push(`![](${imgUrl})`);
 				}
@@ -569,8 +574,8 @@ class XiaohongshuConverter implements ContentConverter {
 		// author 从 note.user 提取（MetadataExtractor 的 meta 标签在 XHS 为空）
 		// author from note.user (MetadataExtractor meta tags are empty on XHS)
 		const user = note.user;
-		if (user?.nickname) {
-			metadataPatch.author = user.nickname;
+		if (user?.nickname || user?.nickName) {
+			metadataPatch.author = user.nickname || user.nickName;
 		}
 
 		// published: __INITIAL_STATE__ note.time → 北京时间 → YYYY-MM-DDTHH:mm:ss
@@ -585,7 +590,17 @@ class XiaohongshuConverter implements ContentConverter {
 			}
 		}
 
+		let canonicalUrl: string | undefined;
+		if (/(?:^|\.)xhslink\.(?:com|cn)$/.test(new URL(url).hostname) && note.noteId && /^[a-zA-Z0-9_-]+$/.test(note.noteId)) {
+			const canonical = new URL(`https://www.xiaohongshu.com/discovery/item/${note.noteId}`);
+			for (const key of ['xsec_token', 'xsec_source'] as const) {
+				const value = state.noteData?.routeQuery?.[key] || new URL(url).searchParams.get(key);
+				if (typeof value === 'string' && value) canonical.searchParams.set(key, value);
+			}
+			canonicalUrl = canonical.href;
+		}
 		return {
+			canonicalUrl,
 			markdown: parts.join('\n'),
 			mediaOnly: note.type === 'normal' && Boolean(note.imageList?.length),
 			metadataPatch: Object.keys(metadataPatch).length > 0 ? metadataPatch : undefined,
@@ -596,8 +611,6 @@ class XiaohongshuConverter implements ContentConverter {
 	 * 从 Document 的 <script> 标签中提取 window.__INITIAL_STATE__ JSON
 	 * Extract window.__INITIAL_STATE__ JSON from Document's <script> tags
 	 *
-	 * 正则 + lastIndexOf("}") 截断，与 all-in-obs / xiaohongshu-importer / ob-Plugin 一致
-	 * Regex + lastIndexOf("}") truncation, identical to all-in-obs / xiaohongshu-importer / ob-Plugin
 	 */
 	private findInitialStateScript(doc: Document): XhsInitialState | null {
 		for (const script of Array.from(doc.querySelectorAll('script'))) {
@@ -618,17 +631,24 @@ class XiaohongshuConverter implements ContentConverter {
 	 */
 	private parseInitialStateJson(jsonStr: string): XhsInitialState | null {
 		try {
-			// 去掉末尾分号 / Strip trailing semicolon
-			jsonStr = jsonStr.replace(/;\s*$/, '');
-			// 取最后一个 } 截断，去掉 JSON 后的多余 JS 代码
-			// Truncate at last } to remove trailing JS code after JSON
-			const lastBrace = jsonStr.lastIndexOf('}');
-			if (lastBrace >= 0) {
-				jsonStr = jsonStr.slice(0, lastBrace + 1);
+			// Read only the assigned object, respecting braces inside quoted strings.
+			if (!jsonStr.startsWith('{')) return null;
+			let depth = 0, quoted = false, escaped = false, end = -1;
+			for (let index = 0; index < jsonStr.length; index++) {
+				const char = jsonStr[index];
+				if (quoted) {
+					if (escaped) escaped = false;
+					else if (char === '\\') escaped = true;
+					else if (char === '"') quoted = false;
+				} else if (char === '"') quoted = true;
+				else if (char === '{') depth++;
+				else if (char === '}' && --depth === 0) { end = index + 1; break; }
 			}
+			if (end < 0) return null;
+			jsonStr = jsonStr.slice(0, end);
 			// 替换 JSON 中非法的 JS 字面量 / Replace illegal JS literals in JSON
-			const cleaned = jsonStr.replace(/("(?:\\.|[^"\\])*")|\b(?:undefined|NaN)\b/g,
-				(token, quoted: string | undefined) => quoted ? token : 'null');
+			const cleaned = jsonStr.replace(/("(?:\\.|[^"\\])*")|\bnew\s+Map\(\s*\[\s*\]\s*\)|\b(?:undefined|NaN)\b/g,
+				(token, quoted: string | undefined) => quoted ? token : token.startsWith('new') ? '{}' : 'null');
 			return JSON.parse(cleaned) as XhsInitialState;
 		} catch {
 			return null;
