@@ -308,7 +308,14 @@ export default class ShareToSavePlugin extends Plugin {
 			if (this.unloaded) throw new Error('Clipping cancelled');
 			const pipeline: Downloader = new Downloader(this.app.vault, this.settings, this.t,
 				(filename, sourcePath) => attachmentPath(this.app, this.settings, filename, sourcePath));
-			if (!Platform.isMobile) return pipeline;
+			if (!Platform.isMobile) return {
+				processUrl: async (url: string, id: string, folder?: string, signal?: AbortSignal) => {
+					if (!/(?:^|\.)(?:bilibili\.com|b23\.tv|douyin\.com|iesdouyin\.com|x\.com|twitter\.com|t\.co|instagram\.com|instagr\.am)$/.test(new URL(url).hostname))
+						return pipeline.processUrl(url, id, folder, signal);
+					const { MobileClipper } = await import('./mobile-clipper');
+					return new MobileClipper(pipeline).processUrl(url, id, folder, signal);
+				},
+			};
 			const { MobileClipper } = await import('./mobile-clipper');
 			return new MobileClipper(pipeline);
 		})().catch((error: unknown) => { this.processor = undefined; throw error; });

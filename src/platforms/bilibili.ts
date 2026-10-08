@@ -19,7 +19,8 @@ export class BilibiliResolver implements PlatformResolver {
 		const video = parsed.pathname.match(/\/video\/(BV[\w]+|av\d+)/i)?.[1];
 		const dynamic = parsed.pathname.match(/\/(?:opus|dynamic)\/(\d+)/)?.[1] || (parsed.hostname === 't.bilibili.com' ? parsed.pathname.match(/^\/(\d+)/)?.[1] : undefined);
 		if (!video && !dynamic) throw new Error('Unsupported Bilibili link: share a video or dynamic post');
-		const canonical = video ? `https://www.bilibili.com/video/${video}/` : `https://www.bilibili.com/opus/${dynamic}`;
+		let canonical = video ? `https://www.bilibili.com/video/${video}/` : `https://www.bilibili.com/opus/${dynamic}`;
+		if (video && /^[1-9]\d*$/.test(parsed.searchParams.get('p') || '')) canonical += '?p=' + parsed.searchParams.get('p');
 		return fallback([
 			async () => {
 				const endpoint = video ? `https://api.bilibili.com/x/web-interface/view?${video.startsWith('av') ? 'aid=' + video.slice(2) : 'bvid=' + video}`

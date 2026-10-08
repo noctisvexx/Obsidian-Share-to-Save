@@ -1,8 +1,9 @@
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import type { App } from 'obsidian';
 import { Platform } from 'obsidian';
-const lazy = vi.hoisted(() => ({ loads: 0 }));
-vi.mock('../src/downloader', () => { lazy.loads++; return { Downloader: class {} }; });
+const lazy = vi.hoisted(() => ({ loads: 0, desktop: vi.fn().mockResolvedValue({ success: true }), mobile: vi.fn().mockResolvedValue({ success: true }) }));
+vi.mock('../src/downloader', () => { lazy.loads++; return { Downloader: class { processUrl = lazy.desktop; } }; });
+vi.mock('../src/mobile-clipper', () => ({ MobileClipper: class { processUrl = lazy.mobile; } }));
 vi.mock('../src/share-menu-injector', () => ({ ShareMenuInjector: class { start(): void {} stop(): void {} } }));
 vi.mock('../src/image-share-injector', () => ({ ImageShareMenuInjector: class { start(): void {} stop(): void {} } }));
 vi.mock('../src/notice-utils', () => ({ showNotice: vi.fn(), clearMobileNotice: vi.fn() }));
@@ -64,4 +65,17 @@ it('does not register services if the plugin unloads during asynchronous setting
 	const register = vi.spyOn(plugin, 'addCommand');
 	const loading = plugin.onload(); plugin.onunload(); release({}); await loading;
 	expect(register).not.toHaveBeenCalled(); expect(adapter.list).not.toHaveBeenCalled();
+});
+
+it('routes new social platforms to shared resolvers on desktop without changing existing acquisition', async () => {
+	const { plugin } = setup();
+	Platform.isMobile = false; Platform.isDesktop = true;
+	await plugin.onload();
+	const processor = await (plugin as unknown as { getProcessor(): Promise<{ processUrl(url: string, id: string): Promise<unknown> }> }).getProcessor();
+	for (const url of ['https://www.bilibili.com/video/BV123', 'https://www.douyin.com/video/123', 'https://x.com/user/status/123', 'https://www.instagram.com/p/ABC/'])
+		await processor.processUrl(url, 'task');
+	expect(lazy.mobile).toHaveBeenCalledTimes(4);
+	await processor.processUrl('https://mp.weixin.qq.com/s', 'wechat');
+	expect(lazy.desktop).toHaveBeenCalledOnce();
+	plugin.onunload();
 });

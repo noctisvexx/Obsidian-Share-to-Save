@@ -50,3 +50,14 @@ it.each([-352, -404])('rejects unavailable content without manufacturing a descr
 	const fetch = vi.fn<FetchPage>().mockResolvedValue(page({ code }));
 	await expect(new BilibiliResolver(fetch).resolve('https://www.bilibili.com/video/BV1xx411c7mD/')).rejects.toThrow('rejected');
 });
+
+it.skipIf(process.env.STS_LIVE_PLATFORM !== '1')('checks the user live Bilibili short link anonymously', async () => {
+	const request: FetchPage = async url => {
+		// eslint-disable-next-line no-restricted-globals -- Opt-in Node acceptance probe, not production networking.
+		const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+		if (!response.ok) throw Error('HTTP ' + response.status);
+		return { text: await response.text(), url: response.url, headers: {} };
+	};
+	const parsed = await new BilibiliResolver(request).resolve('https://b23.tv/A9sQWFy');
+	expect(parsed.title).toContain('KK'); expect(parsed.author).not.toBe(''); expect(parsed.media).toHaveLength(1);
+}, 60000);

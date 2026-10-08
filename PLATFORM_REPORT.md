@@ -102,3 +102,53 @@ validation. Missing timestamps remain empty, not guessed. Expiring CDN URLs can
 fail downloads and leave remote links with existing attachment warnings.
 Changed: `src/platforms/instagram.ts`, nested literal JSON helpers, mobile
 registry, `tests/instagram.test.ts` and this report.
+
+## Final Integration Acceptance
+
+Final default suite: 142 passed, 4 skipped across 17 files. The build (including
+TypeScript checks), lint and diff whitespace checks passed. Three opt-in anonymous
+live resolver tests passed for the supplied B23, public X and Instagram links.
+These are Node tests, NOT Android requestUrl, real media downloads or Vault sync.
+The supplied Douyin link returned a JavaScript verification shell and is expected
+to retain a failed task. The second X link is age-restricted and is rejected.
+
+Eight integration tests exercise the actual mobile registry, shared Markdown and
+attachment saver, queue completion and retained failures for all four platforms.
+Desktop dispatch now uses the same public HTTP resolvers for these platforms;
+existing desktop acquisition for other websites is unchanged. No new Electron
+WebView fallback was added for these four platforms, so desktop retry cannot
+guarantee access when the public source is blocked on both devices.
+Bilibili canonical video links retain a valid part number. Startup tests retain
+lazy initialization and no mobile idle polling. Android startup performance and
+cross-device synchronization still require real-device checks.
+
+Integration files: `src/main.ts`, `src/platforms/bilibili.ts`,
+`tests/bilibili.test.ts`, `tests/startup.test.ts`, `tests/platform-flow.test.ts`
+and this report. Existing regression tests cover queue safety, migration,
+idempotent retries, deleted-note re-clipping, attachments and existing converters.
+Dependency installation reports 24 audit findings (1 low, 5 moderate, 18 high);
+unrelated dependency upgrades were not attempted in this platform adaptation.
+
+## Android Manual Acceptance
+
+1. Back up a test Vault, install the updated plugin package, restart Obsidian and
+   keep the desktop off. Check that startup does not start unsolicited clipping.
+2. Share the supplied B23 link: compare title, UP name, description, cover and
+   source link. Also test a dynamic with multiple pictures; a real dynamic sample
+   from the user is still needed. Subtitles are not implemented in this pass.
+3. Share the supplied Douyin link: expect an explicit verification failure and a
+   retained retryable task, not a blank successful note. Test an anonymously
+   accessible video and image gallery separately; no live success is established.
+4. Share the public X link and compare caption/image. The age-restricted link
+   must fail clearly. Compare long and quoted posts against the browser;
+   X Articles content-state parsing is not supported.
+5. Share the supplied Instagram link: verify all carousel images are saved even
+   with img_index=2. Compare caption/author, then test a single image and a reel
+   poster. Check Obsidian-default and custom attachment folders and usable links.
+6. Share twice, then delete only the saved note and share again. Check dedup and
+   intentional re-clipping without modifying unrelated notes or attachments.
+   Test offline failure, manual retry and desktop fallback on/off after syncing;
+   retained tasks must not disappear and successful mobile notes must not repeat.
+
+Development is paused pending Android acceptance. No claim of four-platform
+Android compatibility or conflict-free real-device synchronization is made.
