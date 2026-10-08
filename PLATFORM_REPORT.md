@@ -135,7 +135,7 @@ unrelated dependency upgrades were not attempted in this platform adaptation.
    keep the desktop off. Check that startup does not start unsolicited clipping.
 2. Share the supplied B23 link: compare title, UP name, description, cover and
    source link. Also test a dynamic with multiple pictures; a real dynamic sample
-   from the user is still needed. Subtitles are not implemented in this pass.
+   from the user is still needed. Optional public subtitles are described below.
 3. Share the supplied Douyin link: expect an explicit verification failure and a
    retained retryable task, not a blank successful note. Test an anonymously
    accessible video and image gallery separately; no live success is established.
@@ -152,3 +152,42 @@ unrelated dependency upgrades were not attempted in this platform adaptation.
 
 Development is paused pending Android acceptance. No claim of four-platform
 Android compatibility or conflict-free real-device synchronization is made.
+
+## Optional Bilibili Subtitles (2026-10-08)
+
+Video-only enhancement: the selected part CID is used with the anonymous
+`x/player/wbi/v2` endpoint, without cookies or generated signatures. Public
+subtitle tracks prefer Chinese official then Chinese AI, followed by other
+languages. Up to three exposed tracks are tried within a four-second total wait
+budget. A pending underlying request can finish later, but cannot start further
+subtitle downloads after the budget expires. Other platforms and dynamics make
+no additional requests. Public subtitle URLs are limited to HTTPS Bilibili/CDN
+hosts. There is no translation, summary or speech recognition.
+
+Bilibili JSON and SRT/VTT cues are rendered without format headers, cue IDs,
+timestamps or styling tags. Adjacent exact duplicates are removed; non-adjacent
+repetitions and spoken numbers are preserved. Continuous fragments are joined;
+gaps of at least two seconds and long completed sentences form paragraphs.
+Successful text is appended after the description under `## 视频字幕`.
+Empty, restricted, malformed, timed-out or failed subtitle responses do not fail
+the clip and do not add an empty section.
+
+Anonymous live probe of the user's BV1trJA66EdT returned code 0 and an empty
+subtitle list for CID 39117720945. This does not establish whether other parts
+or logged-in users have subtitles. No successful live subtitle download or
+Android subtitle test is claimed. Automated fixtures exercise the documented
+body/from/to/content and subtitle/subtitles shapes, not captured successful
+subtitle content from this user's video.
+
+Acceptance: 153 tests passed, 4 opt-in tests skipped; TypeScript/build and lint
+passed. Eleven new cases cover formatting, duplicate removal, official/AI
+preference, language fallback, selected-part handling, no subtitles, restrictions,
+network failure, section placement and timeout. Changed: bilibili resolver,
+new `src/platforms/bilibili-subtitles.ts`,
+`tests/bilibili-subtitles.test.ts`, and this report.
+
+Android follow-up: test a publicly subtitled video with the desktop off and
+compare the section against its captions; verify no timestamps or duplicate
+adjacent lines. Test a p=2 link with different captions, and this user's current
+link/offline subtitle failure to confirm the base video still saves. Real
+Android requestUrl subtitle access and processing speed remain unverified.

@@ -2,6 +2,7 @@ import type { PlatformResolver } from '../resolver-registry';
 import type { ParsedContent } from '../types';
 import { at, date, fallback, find, host, images, list, object, payloads, post, publicPage, string } from './shared';
 import type { Data, FetchPage } from './shared';
+import { videoSubtitles } from './bilibili-subtitles';
 
 export class BilibiliResolver implements PlatformResolver {
 	readonly name = 'Bilibili';
@@ -44,11 +45,13 @@ export class BilibiliResolver implements PlatformResolver {
 			},
 		]);
 	}
-	private video(data: Data, url: string, id: string): ParsedContent {
+	private async video(data: Data, url: string, id: string): Promise<ParsedContent> {
 		if (!(string(data.bvid) === id || 'av' + String(data.aid) === id) || !string(data.title) || !string(at(data, 'owner', 'name')))
 			throw new Error('Bilibili video metadata is incomplete or mismatched');
 		const result = post('bilibili', url, string(data.title), string(at(data, 'owner', 'name')), string(data.desc), images([data.pic], url, image => [image]), date(data.pubdate), 'video');
 		result.authorUrl = `https://space.bilibili.com/${String(at(data, 'owner', 'mid'))}`;
+		const subtitles = await videoSubtitles(this.fetch, data, url);
+		if (subtitles) result.content += `${result.content ? '\n\n' : ''}## 视频字幕\n\n${subtitles}`;
 		return result;
 	}
 	private dynamic(data: Data, url: string, id: string): ParsedContent {
